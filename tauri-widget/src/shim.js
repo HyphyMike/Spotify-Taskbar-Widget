@@ -63,11 +63,12 @@ window.player = {
     authorize: () => invoke('authorize'),
     onAuthSuccess: (cb) => listen('auth-success', () => cb()),
     onAuthRequired: (cb) => listen('auth-required', () => cb()),
+    onMediaKey: (cb) => listen('media-key', (e) => cb(e.payload)),
     getDockState: async () => false,
     requestDockAt: async () => ({ ok: true, docked: false }),
     onDockChanged: () => {},
     cleanupListeners: () => {},
-    logout: async () => {},
+    logout: () => invoke('logout'),
 
     getNowPlaying: async () => {
         const res = await nativeFetch('/me/player');
@@ -117,4 +118,5 @@ window.player = {
     shuffle: async (state, deviceId) => nativeFetch(`/me/player/shuffle?state=${state}${deviceId ? `&device_id=${deviceId}` : ''}`, 'PUT'),
     repeat: async (state, deviceId) => nativeFetch(`/me/player/repeat?state=${state}${deviceId ? `&device_id=${deviceId}` : ''}`, 'PUT'),
     transferPlayback: async (deviceId, play) => nativeFetch('/me/player', 'PUT', { device_ids: [deviceId], play }),
+    getDevices: async () => nativeFetch('/me/player/devices'),
 };

@@ -32,18 +32,29 @@ A premium, ultra-slim (35px) Spotify mini-player designed for native desktop int
 </p>
 
 <p align="center">
-  <img src="./assets/screenshot-widget.png" width="500" alt="Widget Detail">
+  <img src="./assets/screenshot-devices.png" width="500" alt="Widget Detail">
   <br>
-  <em>Dynamic accent colors and polished interface.</em>
+  <em>Dynamic accent colors, polished interface, and one-click device switching.</em>
+</p>
+
+## What's New: Device Switching
+
+The widget now has a dedicated cast icon for jumping between Spotify Connect devices (phone, speakers, another computer) without leaving the taskbar. The panel before this update had no way to do this — you can see the extra icon added to the action row below:
+
+<p align="center">
+  <img src="./assets/screenshot-comparison.png" width="500" alt="Before and after comparison showing the new device switcher icon">
+  <br>
+  <em>New (top): device switcher icon added next to Force Reconnect. Previous version (bottom): no way to switch devices from the widget.</em>
 </p>
 
 ## Key Features
 - **Precision Fit**: Specifically calibrated 35px height for the Windows 11 taskbar.
 - **Cross-Platform**: Intelligent positioning for Windows, macOS, and Linux.
 - **Dynamic Theming**: Automatic color extraction from album art for visual integration.
+- **Device Switching**: Move playback between your phone, speakers, or another computer directly from the widget.
 - **High Performance**: Built with Rust for immediate responsiveness and low resource overhead.
 - **Background Operation**: Runs in the system tray to maintain a clean workspace.
-- **System Integration**: Support for global media keys and auto-focus functionality.
+- **System Integration**: Global media keys (Play/Pause, Next, Previous), auto-focus on hover, and OS-level secure credential storage.
 
 ## Technical Overview
 The widget serves as a high-performance remote bridge for your Spotify account. It operates as a standalone application and **does not require the official Spotify desktop client to be open**. 

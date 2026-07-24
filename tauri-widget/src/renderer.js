@@ -39,6 +39,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const repeatBtn = document.getElementById('repeat-btn');
     const likeBtn = document.getElementById('like-btn');
     const reconnectBtn = document.getElementById('reconnect-btn');
+    const devicesBtn = document.getElementById('devices-btn');
+    const devicePanel = document.getElementById('device-panel');
     const messageTextEl = document.getElementById('message-text');
     const playIcon = document.getElementById('play-icon');
     const pauseIcon = document.getElementById('pause-icon');
@@ -369,28 +371,13 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // --- Event Listeners ---
-    connectBtn.addEventListener('click', () => {
-        window.player.authorize().catch(err => console.error('authorize error:', err));
-    });
-
-    reconnectBtn.addEventListener('click', async () => {
-        if (confirm('Force reconnect to Spotify?')) {
-            await window.__TAURI__.core.invoke('logout');
-            window.location.reload();
-        }
-    });
-
-    closeBtn.addEventListener('click', () => {
-        window.__TAURI__.core.invoke('exit_app');
-    });
-
-    playPauseBtn.addEventListener('click', async () => {
+    // --- Playback actions (shared by on-screen buttons and hardware media keys) ---
+    async function handlePlayPause() {
         if (activeDeviceId && activeDeviceId === localDeviceId && window.localSpotifyPlayer) {
             window.localSpotifyPlayer.togglePlay();
             return;
         }
-        
+
         if ((currentStatus === 'no-device' || currentStatus === 'idle') && localDeviceId) {
             setOptimisticLoading();
             const res = await window.player.transferPlayback(localDeviceId, true);
@@ -402,7 +389,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             return;
         }
-        
+
         setOptimisticLoading();
         const result = await window.player.playPause(isCurrentlyPlaying);
         if (result?.error) {
@@ -410,19 +397,9 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             immediateRefresh(500);
         }
-    });
+    }
 
-    likeBtn.addEventListener('click', async () => {
-        const res = await window.player.toggleLike();
-        if (res?.error) {
-            console.error('Like toggle failed:', res.error);
-            showMessage('Failed to toggle Like. Please reconnect to grant library permissions.');
-            return;
-        }
-        refreshLikeState();
-    });
-
-    nextBtn.addEventListener('click', async () => {
+    async function handleNext() {
         // Update UI instantly with next track info from queue, then send command
         if (globalSpotifyState && globalSpotifyState.track_window?.next_tracks?.length > 0) {
             const nextTrack = globalSpotifyState.track_window.next_tracks.shift();
@@ -444,16 +421,16 @@ document.addEventListener('DOMContentLoaded', () => {
             window.localSpotifyPlayer.nextTrack();
             return;
         }
-        
+
         const result = await window.player.next(activeDeviceId);
         if (result?.error) {
             showMessage(result.error.message || JSON.stringify(result.error));
         } else {
             immediateRefresh(500);
         }
-    });
+    }
 
-    prevBtn.addEventListener('click', async () => {
+    async function handlePrev() {
         // previous_tracks[0] is the MOST recently played track
         if (globalSpotifyState && globalSpotifyState.track_window?.previous_tracks?.length > 0) {
             const prevTrack = globalSpotifyState.track_window.previous_tracks[0];
@@ -475,13 +452,123 @@ document.addEventListener('DOMContentLoaded', () => {
             window.localSpotifyPlayer.previousTrack();
             return;
         }
-        
+
         const result = await window.player.prev(activeDeviceId);
         if (result?.error) {
             showMessage(result.error.message || JSON.stringify(result.error));
         } else {
             immediateRefresh(500);
         }
+    }
+
+    // --- Event Listeners ---
+    connectBtn.addEventListener('click', () => {
+        window.player.authorize().catch(err => console.error('authorize error:', err));
+    });
+
+    reconnectBtn.addEventListener('click', async () => {
+        if (confirm('Force reconnect to Spotify?')) {
+            await window.player.logout();
+            window.location.reload();
+        }
+    });
+
+    closeBtn.addEventListener('click', () => {
+        window.__TAURI__.core.invoke('exit_app');
+    });
+
+    playPauseBtn.addEventListener('click', handlePlayPause);
+    nextBtn.addEventListener('click', handleNext);
+    prevBtn.addEventListener('click', handlePrev);
+
+    // --- Hardware media keys (registered globally in Rust, work even when unfocused) ---
+    window.player.onMediaKey((action) => {
+        if (action === 'play_pause') handlePlayPause();
+        else if (action === 'next') handleNext();
+        else if (action === 'prev') handlePrev();
+    });
+
+    // --- Device switcher panel ---
+    let devicePanelOpen = false;
+    let devicePanelCloseTimeout = null;
+
+    function renderDeviceRows(devices) {
+        devicePanel.innerHTML = '';
+        if (!devices || devices.length === 0) {
+            const empty = document.createElement('div');
+            empty.className = 'device-empty';
+            empty.textContent = 'No devices found';
+            devicePanel.appendChild(empty);
+            return;
+        }
+        devices.forEach(device => {
+            const row = document.createElement('div');
+            row.className = 'device-row' + (device.is_active ? ' active' : '');
+            row.innerHTML = '<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="6"/></svg>' +
+                `<span class="device-name">${device.name}</span>`;
+            row.addEventListener('click', async () => {
+                closeDevicePanel();
+                if (device.is_active) return;
+                setOptimisticLoading();
+                const res = await window.player.transferPlayback(device.id, true);
+                if (res?.error) {
+                    showMessage(res.error.message || 'Error transferring playback');
+                } else {
+                    activeDeviceId = device.id;
+                    immediateRefresh(500);
+                }
+            });
+            devicePanel.appendChild(row);
+        });
+    }
+
+    async function openDevicePanel() {
+        devicePanelOpen = true;
+        devicesBtn.classList.add('active');
+        await window.__TAURI__.core.invoke('set_panel_expanded', { expanded: true });
+        devicePanel.style.display = 'flex';
+        devicePanel.innerHTML = '<div class="device-empty">Loading…</div>';
+
+        const res = await window.player.getDevices();
+        if (!devicePanelOpen) return; // panel was closed while this was in flight
+        if (res?.error) {
+            devicePanel.innerHTML = '<div class="device-empty">Could not load devices</div>';
+            return;
+        }
+        renderDeviceRows(res.data?.devices);
+    }
+
+    function closeDevicePanel() {
+        if (!devicePanelOpen) return;
+        devicePanelOpen = false;
+        devicesBtn.classList.remove('active');
+        devicePanel.style.display = 'none';
+        window.__TAURI__.core.invoke('set_panel_expanded', { expanded: false }).catch(() => {});
+    }
+
+    devicesBtn.addEventListener('click', () => {
+        if (devicePanelOpen) closeDevicePanel();
+        else openDevicePanel();
+    });
+
+    widgetContainer.addEventListener('mouseleave', () => {
+        if (devicePanelCloseTimeout) clearTimeout(devicePanelCloseTimeout);
+        devicePanelCloseTimeout = setTimeout(() => {
+            if (devicePanelOpen) closeDevicePanel();
+        }, 600);
+    });
+    widgetContainer.addEventListener('mouseenter', () => {
+        if (devicePanelCloseTimeout) clearTimeout(devicePanelCloseTimeout);
+    });
+
+    likeBtn.addEventListener('click', async () => {
+        const res = await window.player.toggleLike();
+        if (res?.error) {
+            console.error('Like toggle failed:', res.error);
+            showMessage('Failed to toggle Like. Please reconnect to grant library permissions.');
+            return;
+        }
+        refreshLikeState();
     });
 
     let shuffleRepeatLockTimeout = null;

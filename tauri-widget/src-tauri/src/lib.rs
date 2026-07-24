@@ -8,6 +8,11 @@ use tiny_http::{Server, Response};
 use rand::RngCore;
 use sha2::{Sha256, Digest};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+use keyring::Entry;
+use tauri_plugin_global_shortcut::{Code, Shortcut, ShortcutState};
+
+const KEYRING_SERVICE: &str = "com.madal.spotify-taskbar-widget";
+const KEYRING_USER: &str = "spotify-tokens";
 
 #[derive(Serialize, Deserialize, Clone)]
 struct Config {
@@ -30,7 +35,29 @@ struct AppState {
     tokens: Mutex<Option<Tokens>>,
     config: Config,
     client: Client,
-    token_path: PathBuf,
+}
+
+/// Tokens are stored in the OS credential store (Credential Manager / Keychain /
+/// Secret Service) rather than on disk, so a stolen filesystem snapshot alone
+/// doesn't hand over a live Spotify session.
+fn load_tokens_from_keyring() -> Option<Tokens> {
+    let entry = Entry::new(KEYRING_SERVICE, KEYRING_USER).ok()?;
+    let json = entry.get_password().ok()?;
+    serde_json::from_str(&json).ok()
+}
+
+fn save_tokens_to_keyring(tokens: &Tokens) {
+    if let Ok(entry) = Entry::new(KEYRING_SERVICE, KEYRING_USER) {
+        if let Ok(json) = serde_json::to_string(tokens) {
+            let _ = entry.set_password(&json);
+        }
+    }
+}
+
+fn clear_tokens_from_keyring() {
+    if let Ok(entry) = Entry::new(KEYRING_SERVICE, KEYRING_USER) {
+        let _ = entry.delete_credential();
+    }
 }
 
 fn load_config() -> Config {
@@ -74,11 +101,11 @@ async fn get_access_token(state: State<'_, AppState>) -> Result<Option<String>, 
                         new_tokens.refresh_token = Some(ref_token.clone());
                     }
                     *tokens = new_tokens.clone();
-                    let _ = fs::write(&state.token_path, serde_json::to_string(&new_tokens).unwrap());
+                    save_tokens_to_keyring(&new_tokens);
                     return Ok(Some(new_tokens.access_token));
                 } else {
                     *tokens_guard = None;
-                    let _ = fs::remove_file(&state.token_path);
+                    clear_tokens_from_keyring();
                     return Ok(None);
                 }
             }
@@ -141,8 +168,8 @@ async fn authorize(app: AppHandle, state: State<'_, AppState>) -> Result<(), Str
                     }
                 };
                 tokens.obtained_at = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs() as i64;
-                
-                let _ = fs::write(&state.token_path, serde_json::to_string(&tokens).unwrap());
+
+                save_tokens_to_keyring(&tokens);
                 *state.tokens.lock().await = Some(tokens);
                 
                 let response = Response::from_string("Success! You can safely close this browser window and the widget will start playing.").with_status_code(200);
@@ -193,7 +220,7 @@ async fn spotify_fetch(
                                 if new_tok.refresh_token.is_none() {
                                     new_tok.refresh_token = Some(ref_token.clone());
                                 }
-                                let _ = fs::write(&state.token_path, serde_json::to_string(&new_tok).unwrap());
+                                save_tokens_to_keyring(&new_tok);
                                 let t = new_tok.access_token.clone();
                                 *tokens = new_tok;
                                 t
@@ -202,7 +229,7 @@ async fn spotify_fetch(
                         Ok(res) if res.status().as_u16() == 400 || res.status().as_u16() == 401 => {
                             // Refresh token is likely revoked or invalid
                             *guard = None;
-                            let _ = fs::remove_file(&state.token_path);
+                            clear_tokens_from_keyring();
                             return Ok(SpotifyResponse { status: 401, body: None });
                         },
                         _ => tokens.access_token.clone() // Network error, try with old token as fallback
@@ -246,6 +273,13 @@ async fn spotify_fetch(
 #[tauri::command]
 fn exit_app(app: AppHandle) {
     app.exit(0);
+}
+
+#[tauri::command]
+async fn logout(state: State<'_, AppState>) -> Result<(), String> {
+    *state.tokens.lock().await = None;
+    clear_tokens_from_keyring();
+    Ok(())
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -331,19 +365,68 @@ fn snap_to_corner(window: tauri::Window) {
     }
 }
 
+const PANEL_COLLAPSED_HEIGHT: f64 = 35.0;
+const PANEL_EXPANDED_HEIGHT: f64 = 180.0;
+
+/// Grows/shrinks the (non-resizable-by-user) window to show or hide the device
+/// switcher panel, always anchoring the bottom edge so it expands upward instead
+/// of pushing past the taskbar.
+#[tauri::command]
+fn set_panel_expanded(window: tauri::Window, expanded: bool) {
+    if let (Ok(pos), Ok(size)) = (window.outer_position(), window.outer_size()) {
+        let scale_factor = window.scale_factor().unwrap_or(1.0);
+        let target_height = if expanded { PANEL_EXPANDED_HEIGHT } else { PANEL_COLLAPSED_HEIGHT };
+        let new_height_phys = (target_height * scale_factor) as u32;
+        let bottom = pos.y + size.height as i32;
+        let new_y = bottom - new_height_phys as i32;
+
+        let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(size.width, new_height_phys)));
+        let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(pos.x, new_y)));
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_shortcuts([
+                    Shortcut::new(None, Code::MediaPlayPause),
+                    Shortcut::new(None, Code::MediaTrackNext),
+                    Shortcut::new(None, Code::MediaTrackPrevious),
+                ])
+                .unwrap()
+                .with_handler(|app, shortcut, event| {
+                    if event.state != ShortcutState::Pressed {
+                        return;
+                    }
+                    let action = match shortcut.key {
+                        Code::MediaPlayPause => "play_pause",
+                        Code::MediaTrackNext => "next",
+                        Code::MediaTrackPrevious => "prev",
+                        _ => return,
+                    };
+                    let _ = app.emit("media-key", action);
+                })
+                .build(),
+        )
         .setup(|app| {
             let app_dir = app.path().app_data_dir().unwrap();
             fs::create_dir_all(&app_dir).unwrap();
             let token_path = app_dir.join("tokens.json");
-            
-            let mut initial_tokens = None;
-            if let Ok(data) = fs::read_to_string(&token_path) {
-                if let Ok(tokens) = serde_json::from_str(&data) {
-                    initial_tokens = Some(tokens);
+
+            // Tokens live in the OS credential store. Fall back to migrating an
+            // older plaintext tokens.json from disk so existing installs don't
+            // get logged out, then remove the plaintext copy.
+            let mut initial_tokens = load_tokens_from_keyring();
+            if initial_tokens.is_none() {
+                if let Ok(data) = fs::read_to_string(&token_path) {
+                    if let Ok(tokens) = serde_json::from_str::<Tokens>(&data) {
+                        save_tokens_to_keyring(&tokens);
+                        let _ = fs::remove_file(&token_path);
+                        initial_tokens = Some(tokens);
+                    }
                 }
             }
 
@@ -354,7 +437,6 @@ pub fn run() {
                     .redirect(reqwest::redirect::Policy::none())
                     .build()
                     .unwrap_or_else(|_| Client::new()),
-                token_path,
             });
 
             // --- System Tray Setup ---
@@ -488,7 +570,7 @@ pub fn run() {
 
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![get_access_token, authorize, spotify_fetch, exit_app, snap_to_corner, save_window_state, load_window_state, focus_window])
+        .invoke_handler(tauri::generate_handler![get_access_token, authorize, spotify_fetch, exit_app, logout, snap_to_corner, save_window_state, load_window_state, focus_window, set_panel_expanded])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
@@ -497,7 +579,6 @@ pub fn run() {
 mod tests {
     use super::*;
     use std::fs;
-    use std::path::PathBuf;
 
     // --- WindowState serialization ---
     #[test]
