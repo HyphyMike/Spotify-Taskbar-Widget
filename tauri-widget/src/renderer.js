@@ -41,6 +41,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const reconnectBtn = document.getElementById('reconnect-btn');
     const devicesBtn = document.getElementById('devices-btn');
     const devicePanel = document.getElementById('device-panel');
+    const playlistsBtn = document.getElementById('playlists-btn');
+    const playlistPanel = document.getElementById('playlist-panel');
+    const splitHandle = document.getElementById('split-handle');
     const messageTextEl = document.getElementById('message-text');
     const playIcon = document.getElementById('play-icon');
     const pauseIcon = document.getElementById('pause-icon');
@@ -488,51 +491,88 @@ document.addEventListener('DOMContentLoaded', () => {
         else if (action === 'prev') handlePrev();
     });
 
-    // --- Device switcher panel ---
+    // --- Panel icons (per Spotify Connect device type) ---
+    const DEVICE_ICONS = {
+        Computer: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="13" rx="1.5"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>',
+        Smartphone: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"/><line x1="11" y1="18" x2="13" y2="18"/></svg>',
+        Speaker: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><circle cx="12" cy="14" r="4"/><circle cx="12" cy="6" r="1"/></svg>',
+        TV: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="14" rx="1.5"/><line x1="8" y1="21" x2="16" y2="21"/></svg>',
+    };
+    const DEVICE_ICON_DEFAULT = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6"/><path d="M2 12a9 9 0 0 1 8 8"/><path d="M2 16a5 5 0 0 1 4 4"/><line x1="2" y1="20" x2="2.01" y2="20"/></svg>';
+    const PLAYLIST_ICON_DEFAULT = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>';
+    const EQ_BARS = '<div class="eq-active"><span></span><span></span><span></span></div>';
+
+    function panelEmptyHtml(text) {
+        return `<div class="panel-empty"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="9"/></svg><span>${text}</span></div>`;
+    }
+
+    let anyPanelOpen = false;
+    let panelCloseTimeout = null;
+
+    function closeAllPanels() {
+        if (devicePanelOpen) closeDevicePanel();
+        if (playlistPanelOpen) closePlaylistPanel();
+    }
+
+    // --- Devices: floating popup card ---
     let devicePanelOpen = false;
-    let devicePanelCloseTimeout = null;
 
     function renderDeviceRows(devices) {
-        devicePanel.innerHTML = '';
+        const card = document.createElement('div');
+        card.className = 'device-popup-card';
+
         if (!devices || devices.length === 0) {
-            const empty = document.createElement('div');
-            empty.className = 'device-empty';
-            empty.textContent = 'No devices found';
-            devicePanel.appendChild(empty);
-            return;
-        }
-        devices.forEach(device => {
-            const row = document.createElement('div');
-            row.className = 'device-row' + (device.is_active ? ' active' : '');
-            row.innerHTML = '<svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><circle cx="12" cy="12" r="6"/></svg>' +
-                `<span class="device-name">${device.name}</span>`;
-            row.addEventListener('click', async () => {
-                closeDevicePanel();
-                if (device.is_active) return;
-                setOptimisticLoading();
-                const res = await window.player.transferPlayback(device.id, true);
-                if (res?.error) {
-                    showMessage(res.error.message || 'Error transferring playback');
-                } else {
-                    activeDeviceId = device.id;
-                    immediateRefresh(500);
-                }
+            card.innerHTML = panelEmptyHtml('No devices found');
+        } else {
+            devices.forEach(device => {
+                const row = document.createElement('div');
+                row.className = 'panel-row' + (device.is_active ? ' active' : '');
+                row.innerHTML =
+                    `<span class="row-icon">${DEVICE_ICONS[device.type] || DEVICE_ICON_DEFAULT}</span>` +
+                    `<span class="row-text"><span class="row-title">${device.name}</span></span>` +
+                    (device.is_active ? EQ_BARS : '');
+                row.addEventListener('click', async () => {
+                    closeDevicePanel();
+                    if (device.is_active) return;
+                    setOptimisticLoading();
+                    const res = await window.player.transferPlayback(device.id, true);
+                    if (res?.error) {
+                        showMessage(res.error.message || 'Error transferring playback');
+                    } else {
+                        activeDeviceId = device.id;
+                        immediateRefresh(500);
+                    }
+                });
+                card.appendChild(row);
             });
-            devicePanel.appendChild(row);
-        });
+        }
+
+        devicePanel.innerHTML = '';
+        devicePanel.appendChild(card);
+
+        // Anchor the card (and its caret) under the devices button, clamped to stay on-screen.
+        const btnRect = devicesBtn.getBoundingClientRect();
+        const containerRect = widgetContainer.getBoundingClientRect();
+        const caretX = btnRect.left - containerRect.left + btnRect.width / 2;
+        const cardWidth = card.offsetWidth;
+        const left = Math.max(8, Math.min(containerRect.width - cardWidth - 8, caretX - cardWidth / 2));
+        card.style.left = `${left}px`;
+        card.style.setProperty('--caret-left', `${caretX - left}px`);
     }
 
     async function openDevicePanel() {
+        closePlaylistPanel();
         devicePanelOpen = true;
+        anyPanelOpen = true;
         devicesBtn.classList.add('active');
         await window.__TAURI__.core.invoke('set_panel_expanded', { expanded: true });
         devicePanel.style.display = 'flex';
-        devicePanel.innerHTML = '<div class="device-empty">Loading…</div>';
+        devicePanel.innerHTML = `<div class="device-popup-card">${panelEmptyHtml('Loading…')}</div>`;
 
         const res = await window.player.getDevices();
         if (!devicePanelOpen) return; // panel was closed while this was in flight
         if (res?.error) {
-            devicePanel.innerHTML = '<div class="device-empty">Could not load devices</div>';
+            devicePanel.innerHTML = `<div class="device-popup-card">${panelEmptyHtml('Could not load devices')}</div>`;
             return;
         }
         renderDeviceRows(res.data?.devices);
@@ -543,7 +583,10 @@ document.addEventListener('DOMContentLoaded', () => {
         devicePanelOpen = false;
         devicesBtn.classList.remove('active');
         devicePanel.style.display = 'none';
-        window.__TAURI__.core.invoke('set_panel_expanded', { expanded: false }).catch(() => {});
+        if (!playlistPanelOpen) {
+            anyPanelOpen = false;
+            window.__TAURI__.core.invoke('set_panel_expanded', { expanded: false }).catch(() => {});
+        }
     }
 
     devicesBtn.addEventListener('click', () => {
@@ -551,14 +594,288 @@ document.addEventListener('DOMContentLoaded', () => {
         else openDevicePanel();
     });
 
+    // --- Playlists panel: search songs, browse playlists (incl. Liked Songs), drill into a playlist to pick a song ---
+    let playlistPanelOpen = false;
+    let playlistView = 'list'; // 'list' | 'tracks'
+    let cachedPlaylists = null;
+    let currentPlaylist = null;
+    let searchDebounceTimeout = null;
+    let searchToken = 0;
+
+    const LIKED_SONGS = { id: '__liked__', liked: true, name: 'Liked Songs', images: [] };
+    const LIKED_ICON = '<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M12 21s-6.7-4.35-9.3-8.1C1 10.1 1.6 6.6 4.6 5.1c2.3-1.15 4.6-.3 5.9 1.4l1.5 1.9 1.5-1.9c1.3-1.7 3.6-2.55 5.9-1.4 3 1.5 3.6 5 1.9 7.8C18.7 16.65 12 21 12 21z"/></svg>';
+    const SEARCH_ICON = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>';
+
+    function makeTrackRow(track, onClick) {
+        const row = document.createElement('div');
+        row.className = 'panel-row';
+        const art = track.album?.images?.[0]?.url;
+        row.innerHTML =
+            `<span class="row-icon">${art ? `<img src="${art}" alt="">` : PLAYLIST_ICON_DEFAULT}</span>` +
+            `<span class="row-text"><span class="row-title">${track.name}</span>` +
+            `<span class="row-subtitle">${(track.artists || []).map(a => a.name).join(', ')}</span></span>`;
+        row.addEventListener('click', onClick);
+        return row;
+    }
+
+    async function playLikedSongs() {
+        const res = await window.player.getLikedSongs();
+        if (res?.error) return res;
+        const uris = (res.data?.items || []).map(i => i.track?.uri).filter(Boolean);
+        if (uris.length === 0) return { error: { message: 'No liked songs found' } };
+        return window.player.playUris(uris, activeDeviceId || localDeviceId);
+    }
+
+    function makePlaylistRow(playlist, subtitleOverride) {
+        const row = document.createElement('div');
+        row.className = 'panel-row';
+        const art = playlist.images?.[0]?.url;
+        const icon = playlist.liked ? LIKED_ICON : PLAYLIST_ICON_DEFAULT;
+        const subtitle = subtitleOverride ?? `${playlist.owner?.display_name || ''} · ${playlist.tracks?.total ?? 0} songs`;
+        row.innerHTML =
+            `<span class="row-icon">${art ? `<img src="${art}" alt="">` : icon}</span>` +
+            `<span class="row-text"><span class="row-title">${playlist.name}</span>` +
+            `<span class="row-subtitle">${subtitle}</span></span>` +
+            `<span class="row-action" title="Browse songs"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 6 15 12 9 18"/></svg></span>`;
+
+        row.addEventListener('click', async () => {
+            closePlaylistPanel();
+            setOptimisticLoading();
+            const res = playlist.liked
+                ? await playLikedSongs()
+                : await window.player.playContext(playlist.uri, activeDeviceId || localDeviceId);
+            if (res?.error) {
+                showMessage(res.error.message || 'Error starting playback');
+            } else {
+                immediateRefresh(500);
+            }
+        });
+        row.querySelector('.row-action').addEventListener('click', (e) => {
+            e.stopPropagation();
+            openPlaylistTracks(playlist);
+        });
+        return row;
+    }
+
+    function renderPlaylistBrowseList() {
+        const body = document.getElementById('playlist-body');
+        if (!body) return;
+        body.innerHTML = '';
+        body.appendChild(makePlaylistRow(LIKED_SONGS, 'Your saved tracks'));
+        (cachedPlaylists || []).forEach(playlist => body.appendChild(makePlaylistRow(playlist)));
+    }
+
+    async function runSearch(query) {
+        const token = ++searchToken;
+        const body = document.getElementById('playlist-body');
+        if (body) body.innerHTML = panelEmptyHtml('Searching…');
+
+        const res = await window.player.searchTracks(query);
+        if (token !== searchToken) return; // a newer search (or list view) superseded this one
+        const freshBody = document.getElementById('playlist-body');
+        if (!freshBody) return;
+        if (res?.error) {
+            freshBody.innerHTML = panelEmptyHtml('Search failed');
+            return;
+        }
+        const tracks = res.data?.tracks?.items || [];
+        if (tracks.length === 0) {
+            freshBody.innerHTML = panelEmptyHtml('No songs found');
+            return;
+        }
+        freshBody.innerHTML = '';
+        tracks.forEach(track => {
+            freshBody.appendChild(makeTrackRow(track, async () => {
+                closePlaylistPanel();
+                setOptimisticLoading();
+                const deviceId = activeDeviceId || localDeviceId;
+                const res = await window.player.playUris([track.uri], deviceId);
+                if (res?.error) {
+                    showMessage(res.error.message || 'Error playing song');
+                    return;
+                }
+                immediateRefresh(500);
+                // A single searched track has no queue behind it and would just stop
+                // when it ends, so line up more from the same artist in the background.
+                // (Spotify's /recommendations endpoint is restricted to apps with special
+                // extended-access approval, so it isn't usable here.)
+                queueSimilarTracks(track, deviceId);
+            }));
+        });
+    }
+
+    let cachedMarket = null;
+    async function getMarket() {
+        if (cachedMarket) return cachedMarket;
+        const res = await window.player.getMe();
+        cachedMarket = res?.data?.country || 'US';
+        return cachedMarket;
+    }
+
+    async function queueSimilarTracks(track, deviceId) {
+        const artistId = track.artists?.[0]?.id;
+        if (!artistId) return;
+        const market = await getMarket();
+        const res = await window.player.getArtistTopTracks(artistId, market);
+        if (res?.error) return;
+        const uris = (res.data?.tracks || [])
+            .map(t => t.uri)
+            .filter(uri => uri && uri !== track.uri)
+            .slice(0, 8);
+        for (const uri of uris) {
+            await window.player.queueTrack(uri, deviceId);
+        }
+    }
+
+    function onSearchInput(e) {
+        const query = e.target.value.trim();
+        if (searchDebounceTimeout) clearTimeout(searchDebounceTimeout);
+        if (!query) {
+            searchToken++; // invalidate any in-flight search
+            renderPlaylistBrowseList();
+            return;
+        }
+        searchDebounceTimeout = setTimeout(() => runSearch(query), 300);
+    }
+
+    function renderPlaylistListView() {
+        playlistPanel.innerHTML =
+            `<div class="panel-search-wrap"><span class="panel-search-icon">${SEARCH_ICON}</span>` +
+            '<input type="text" id="playlist-search-input" class="panel-search" placeholder="Search songs…" autocomplete="off"></div>' +
+            '<div class="panel-body" id="playlist-body"></div>';
+        document.getElementById('playlist-search-input').addEventListener('input', onSearchInput);
+        renderPlaylistBrowseList();
+    }
+
+    async function openPlaylistTracks(playlist) {
+        currentPlaylist = playlist;
+        playlistView = 'tracks';
+        playlistPanel.innerHTML =
+            `<div class="panel-header clickable" id="playlist-back"><span class="back-chevron"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></span>${playlist.name}</div>` +
+            `<div class="panel-body" id="playlist-body">${panelEmptyHtml('Loading…')}</div>`;
+        document.getElementById('playlist-back').addEventListener('click', () => {
+            playlistView = 'list';
+            renderPlaylistListView();
+        });
+
+        const res = playlist.liked
+            ? await window.player.getLikedSongs()
+            : await window.player.getPlaylistTracks(playlist.id);
+        if (playlistView !== 'tracks' || currentPlaylist !== playlist) return; // navigated away while loading
+        const body = document.getElementById('playlist-body');
+        if (res?.error) {
+            body.innerHTML = panelEmptyHtml('Could not load songs');
+            return;
+        }
+        const tracks = (res.data?.items || []).map(i => i.track).filter(Boolean);
+        if (tracks.length === 0) {
+            body.innerHTML = panelEmptyHtml('No songs found');
+            return;
+        }
+        const uris = tracks.map(t => t.uri);
+        body.innerHTML = '';
+        tracks.forEach((track, idx) => {
+            body.appendChild(makeTrackRow(track, async () => {
+                closePlaylistPanel();
+                setOptimisticLoading();
+                const res = playlist.liked
+                    ? await window.player.playUris(uris, activeDeviceId || localDeviceId, idx)
+                    : await window.player.playContext(playlist.uri, activeDeviceId || localDeviceId, track.uri);
+                if (res?.error) {
+                    showMessage(res.error.message || 'Error playing song');
+                } else {
+                    immediateRefresh(500);
+                }
+            }));
+        });
+    }
+
+    async function openPlaylistPanel() {
+        closeDevicePanel();
+        playlistPanelOpen = true;
+        anyPanelOpen = true;
+        playlistView = 'list';
+        playlistsBtn.classList.add('active');
+        await window.__TAURI__.core.invoke('set_panel_expanded', { expanded: true });
+        playlistPanel.style.display = 'flex';
+
+        if (cachedPlaylists) {
+            renderPlaylistListView();
+        } else {
+            playlistPanel.innerHTML = `<div class="panel-header">Playlists</div><div class="panel-body">${panelEmptyHtml('Loading…')}</div>`;
+            const res = await window.player.getPlaylists();
+            if (!playlistPanelOpen) return; // closed while loading
+            if (res?.error) {
+                playlistPanel.innerHTML = `<div class="panel-header">Playlists</div><div class="panel-body">${panelEmptyHtml('Could not load playlists')}</div>`;
+                return;
+            }
+            cachedPlaylists = res.data?.items || [];
+            renderPlaylistListView();
+        }
+    }
+
+    function closePlaylistPanel() {
+        if (!playlistPanelOpen) return;
+        playlistPanelOpen = false;
+        playlistsBtn.classList.remove('active');
+        playlistPanel.style.display = 'none';
+        if (!devicePanelOpen) {
+            anyPanelOpen = false;
+            window.__TAURI__.core.invoke('set_panel_expanded', { expanded: false }).catch(() => {});
+        }
+    }
+
+    playlistsBtn.addEventListener('click', () => {
+        if (playlistPanelOpen) closePlaylistPanel();
+        else openPlaylistPanel();
+    });
+
     widgetContainer.addEventListener('mouseleave', () => {
-        if (devicePanelCloseTimeout) clearTimeout(devicePanelCloseTimeout);
-        devicePanelCloseTimeout = setTimeout(() => {
-            if (devicePanelOpen) closeDevicePanel();
+        if (panelCloseTimeout) clearTimeout(panelCloseTimeout);
+        panelCloseTimeout = setTimeout(() => {
+            if (anyPanelOpen) closeAllPanels();
         }, 600);
     });
     widgetContainer.addEventListener('mouseenter', () => {
-        if (devicePanelCloseTimeout) clearTimeout(devicePanelCloseTimeout);
+        if (panelCloseTimeout) clearTimeout(panelCloseTimeout);
+    });
+
+    // --- Title/buttons split handle: drag to trade space between the track
+    // title and the control buttons (which shrink/grow in place via CSS
+    // transform). Window width itself never changes, only the internal split. ---
+    const CTRL_SCALE_KEY = 'spotify_ctrl_scale';
+    const CTRL_SCALE_MIN = 0.55;
+    const CTRL_SCALE_MAX = 1;
+    const ACTION_GROUP_NATURAL_WIDTH = 271;
+
+    function applyCtrlScale(scale) {
+        const clamped = Math.max(CTRL_SCALE_MIN, Math.min(CTRL_SCALE_MAX, scale));
+        document.documentElement.style.setProperty('--ctrl-scale', clamped);
+        localStorage.setItem(CTRL_SCALE_KEY, clamped);
+        return clamped;
+    }
+
+    const savedCtrlScale = parseFloat(localStorage.getItem(CTRL_SCALE_KEY));
+    applyCtrlScale(Number.isFinite(savedCtrlScale) ? savedCtrlScale : 1);
+
+    let splitDragStartX = 0;
+    let splitDragStartScale = 1;
+
+    splitHandle.addEventListener('pointerdown', (e) => {
+        splitDragStartX = e.clientX;
+        splitDragStartScale = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--ctrl-scale')) || 1;
+        splitHandle.classList.add('dragging');
+        splitHandle.setPointerCapture(e.pointerId);
+    });
+    splitHandle.addEventListener('pointermove', (e) => {
+        if (!splitHandle.hasPointerCapture(e.pointerId)) return;
+        const deltaX = e.clientX - splitDragStartX;
+        // Dragging right shrinks the buttons (title grows); dragging left grows them back.
+        applyCtrlScale(splitDragStartScale - deltaX / ACTION_GROUP_NATURAL_WIDTH);
+    });
+    splitHandle.addEventListener('pointerup', (e) => {
+        splitHandle.classList.remove('dragging');
+        splitHandle.releasePointerCapture(e.pointerId);
     });
 
     likeBtn.addEventListener('click', async () => {

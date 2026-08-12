@@ -35,6 +35,11 @@ struct AppState {
     tokens: Mutex<Option<Tokens>>,
     config: Config,
     client: Client,
+    // The window's Y position while collapsed, captured right before it grows to
+    // show a panel. Collapsing restores this exact value instead of recomputing
+    // from whatever the window's geometry happens to be at close time, so the
+    // bar can't drift from its resting spot across an expand/collapse cycle.
+    collapsed_y: std::sync::Mutex<Option<i32>>,
 }
 
 /// Tokens are stored in the OS credential store (Credential Manager / Keychain /
@@ -368,21 +373,30 @@ fn snap_to_corner(window: tauri::Window) {
 const PANEL_COLLAPSED_HEIGHT: f64 = 35.0;
 const PANEL_EXPANDED_HEIGHT: f64 = 180.0;
 
-/// Grows/shrinks the (non-resizable-by-user) window to show or hide the device
-/// switcher panel, always anchoring the bottom edge so it expands upward instead
-/// of pushing past the taskbar.
+/// Grows/shrinks the (non-resizable-by-user) window to show or hide a panel,
+/// always anchoring the bottom edge so it expands upward instead of pushing
+/// past the taskbar. Collapsing restores the exact Y captured at expand time
+/// (see `AppState::collapsed_y`) rather than recomputing from current
+/// geometry, so the bar can't end up a few pixels off from where it started.
 #[tauri::command]
-fn set_panel_expanded(window: tauri::Window, expanded: bool) {
-    if let (Ok(pos), Ok(size)) = (window.outer_position(), window.outer_size()) {
-        let scale_factor = window.scale_factor().unwrap_or(1.0);
-        let target_height = if expanded { PANEL_EXPANDED_HEIGHT } else { PANEL_COLLAPSED_HEIGHT };
-        let new_height_phys = (target_height * scale_factor) as u32;
-        let bottom = pos.y + size.height as i32;
-        let new_y = bottom - new_height_phys as i32;
+fn set_panel_expanded(window: tauri::Window, state: State<'_, AppState>, expanded: bool) {
+    let (Ok(pos), Ok(size)) = (window.outer_position(), window.outer_size()) else { return };
+    let scale_factor = window.scale_factor().unwrap_or(1.0);
+    let collapsed_height_phys = (PANEL_COLLAPSED_HEIGHT * scale_factor).round() as i32;
+    let expanded_height_phys = (PANEL_EXPANDED_HEIGHT * scale_factor).round() as i32;
 
-        let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(size.width, new_height_phys)));
-        let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(pos.x, new_y)));
-    }
+    let mut collapsed_y = state.collapsed_y.lock().unwrap();
+    let (target_height_phys, new_y) = if expanded {
+        let base_y = pos.y;
+        *collapsed_y = Some(base_y);
+        (expanded_height_phys, base_y - (expanded_height_phys - collapsed_height_phys))
+    } else {
+        let base_y = collapsed_y.take().unwrap_or(pos.y);
+        (collapsed_height_phys, base_y)
+    };
+
+    let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize::new(size.width, target_height_phys as u32)));
+    let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(pos.x, new_y)));
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -437,6 +451,7 @@ pub fn run() {
                     .redirect(reqwest::redirect::Policy::none())
                     .build()
                     .unwrap_or_else(|_| Client::new()),
+                collapsed_y: std::sync::Mutex::new(None),
             });
 
             // --- System Tray Setup ---
@@ -494,7 +509,7 @@ pub fn run() {
                                 let _ = window.set_position(tauri::Position::Physical(
                                     tauri::PhysicalPosition::new(ws.x, ws.y)
                                 ));
-                                // Do NOT restore size from state to ensure new 35px height is applied
+                                // Do NOT restore size from state to ensure the fixed 400x35 shape is applied
                                 let _ = window.set_size(tauri::Size::Logical(
                                     tauri::LogicalSize::new(400.0, 35.0)
                                 ));

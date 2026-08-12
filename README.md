@@ -47,11 +47,23 @@ The widget now has a dedicated cast icon for jumping between Spotify Connect dev
   <em>New (top): device switcher icon added next to Force Reconnect. Previous version (bottom): no way to switch devices from the widget.</em>
 </p>
 
+## What's New: Playlists, Search & a Flexible Layout
+
+Beyond switching devices, the widget can now browse and search your library directly:
+
+- **Playlists panel**: A dedicated icon opens your Spotify playlists. Click one to start playing it, or use the arrow on a row to open that playlist and jump straight to a specific song.
+- **Liked Songs**: Pinned at the top of the playlist list for one-click access to your saved tracks, with the same browse-to-a-song support.
+- **Search**: A search box at the top of the playlist panel finds any song in your Spotify catalog and plays it instantly. Playback doesn't just stop when the song ends either — a handful of tracks from the same artist are queued up afterward.
+- **Redesigned device switcher**: The device list is now a floating popup anchored to its icon, opening above the player bar instead of pushing it around.
+- **Adjustable layout**: A thin drag handle between the track title and the buttons lets you trade horizontal space between them — more room for long titles, or full-size buttons — without resizing the window itself. Your preference is remembered between sessions.
+
 ## Key Features
 - **Precision Fit**: Specifically calibrated 35px height for the Windows 11 taskbar.
 - **Cross-Platform**: Intelligent positioning for Windows, macOS, and Linux.
 - **Dynamic Theming**: Automatic color extraction from album art for visual integration.
 - **Device Switching**: Move playback between your phone, speakers, or another computer directly from the widget.
+- **Playlists & Search**: Browse your playlists (Liked Songs included), search your Spotify library for a specific song, and jump straight into playback.
+- **Adjustable Layout**: Drag a small handle to trade space between the track title and the control buttons to fit your preference.
 - **High Performance**: Built with Rust for immediate responsiveness and low resource overhead.
 - **Background Operation**: Runs in the system tray to maintain a clean workspace.
 - **System Integration**: Global media keys (Play/Pause, Next, Previous), auto-focus on hover, and OS-level secure credential storage.
