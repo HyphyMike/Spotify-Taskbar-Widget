@@ -12,14 +12,14 @@
 
 ---
 
-A premium, ultra-slim (35px) Spotify mini-player designed for native desktop integration. Compatible with Windows 11, macOS, and Linux, this widget integrates into your Taskbar or Menu Bar for seamless playback control.
+A premium, ultra-slim (40px) Spotify mini-player designed for native desktop integration. Compatible with Windows 11, macOS, and Linux, this widget integrates into your Taskbar or Menu Bar for seamless playback control.
 
 ## Performance Comparison
 
 | Feature | Official Spotify App | Spotify Taskbar Widget |
 | :--- | :---: | :---: |
 | RAM Usage | ~500MB - 1GB+ | **~50MB - 80MB** |
-| Footprint | Full Window | **Ultra-Slim 35px** |
+| Footprint | Full Window | **Ultra-Slim 40px** |
 | Tech Stack | Electron | **Tauri + Rust** |
 | System Impact | High | **Minimal** |
 | Integration | Standard Window | **Native Desktop Module** |
@@ -58,7 +58,7 @@ Beyond switching devices, the widget can now browse and search your library dire
 - **Adjustable layout**: A thin drag handle between the track title and the buttons lets you trade horizontal space between them — more room for long titles, or full-size buttons — without resizing the window itself. Your preference is remembered between sessions.
 
 ## Key Features
-- **Precision Fit**: Specifically calibrated 35px height for the Windows 11 taskbar.
+- **Precision Fit**: Specifically calibrated 40px height for the Windows 11 taskbar.
 - **Cross-Platform**: Intelligent positioning for Windows, macOS, and Linux.
 - **Dynamic Theming**: Automatic color extraction from album art for visual integration.
 - **Device Switching**: Move playback between your phone, speakers, or another computer directly from the widget.

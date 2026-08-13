@@ -334,9 +334,9 @@ fn is_position_valid_on_monitors(window: &tauri::WebviewWindow, x: i32, y: i32) 
         for monitor in monitors {
             let pos = monitor.position();
             let size = monitor.size();
-            
+
             // Check if position is within this monitor's bounds (with some padding tolerance)
-            if x >= pos.x && x < pos.x + size.width as i32 && 
+            if x >= pos.x && x < pos.x + size.width as i32 &&
                y >= pos.y && y < pos.y + size.height as i32 {
                 return true;
             }
@@ -345,21 +345,42 @@ fn is_position_valid_on_monitors(window: &tauri::WebviewWindow, x: i32, y: i32) 
     false
 }
 
+/// Scale factor of whichever monitor contains (x, y). At startup the window is
+/// still sitting on Tauri's initial default monitor, which may differ from the
+/// monitor a saved position lands on (mixed-DPI multi-monitor setups) — so this
+/// must be used instead of `window.scale_factor()` when restoring a position.
+fn scale_factor_at_position(window: &tauri::WebviewWindow, x: i32, y: i32) -> f64 {
+    if let Ok(monitors) = window.available_monitors() {
+        for monitor in monitors {
+            let pos = monitor.position();
+            let size = monitor.size();
+            if x >= pos.x && x < pos.x + size.width as i32 &&
+               y >= pos.y && y < pos.y + size.height as i32 {
+                return monitor.scale_factor();
+            }
+        }
+    }
+    window.scale_factor().unwrap_or(1.0)
+}
+
 #[tauri::command]
 fn focus_window(window: tauri::Window) {
     let _ = window.set_focus();
 }
 
+const PANEL_COLLAPSED_HEIGHT: f64 = 40.0;
+const PANEL_EXPANDED_HEIGHT: f64 = 180.0;
+
 #[tauri::command]
 fn snap_to_corner(window: tauri::Window) {
     if let Ok(Some(monitor)) = window.primary_monitor() {
-        let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize::new(400.0, 35.0)));
-        
+        let _ = window.set_size(tauri::Size::Logical(tauri::LogicalSize::new(400.0, PANEL_COLLAPSED_HEIGHT)));
+
         let scale_factor = monitor.scale_factor();
-        
+
         // Use physical pixels for position to be precise about the taskbar gap
         let win_w_phys = (400.0 * scale_factor) as u32;
-        let win_h_phys = (35.0 * scale_factor) as u32;
+        let win_h_phys = (PANEL_COLLAPSED_HEIGHT * scale_factor) as u32;
         let taskbar_h_phys = (monitor.size().height as i32 - monitor.work_area().size.height as i32).abs();
 
         // Snap to bottom-center
@@ -369,9 +390,6 @@ fn snap_to_corner(window: tauri::Window) {
         let _ = window.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(x, y)));
     }
 }
-
-const PANEL_COLLAPSED_HEIGHT: f64 = 35.0;
-const PANEL_EXPANDED_HEIGHT: f64 = 180.0;
 
 /// Grows/shrinks the (non-resizable-by-user) window to show or hide a panel,
 /// always anchoring the bottom edge so it expands upward instead of pushing
@@ -506,12 +524,22 @@ pub fn run() {
                         if let Ok(ws) = serde_json::from_str::<WindowState>(&data) {
                             // Validate that saved position is on a current monitor
                             if is_position_valid_on_monitors(&window, ws.x, ws.y) {
+                                // If the app was last closed while a panel was still
+                                // expanded, ws.y is the top of that taller window, not
+                                // the collapsed resting position. Expand/collapse always
+                                // preserves the bottom edge, so re-derive the correct
+                                // collapsed y from it instead of trusting ws.y directly.
+                                let scale_factor = scale_factor_at_position(&window, ws.x, ws.y);
+                                let collapsed_height_phys = (PANEL_COLLAPSED_HEIGHT * scale_factor).round() as i32;
+                                let bottom = ws.y + ws.height as i32;
+                                let corrected_y = bottom - collapsed_height_phys;
+
                                 let _ = window.set_position(tauri::Position::Physical(
-                                    tauri::PhysicalPosition::new(ws.x, ws.y)
+                                    tauri::PhysicalPosition::new(ws.x, corrected_y)
                                 ));
-                                // Do NOT restore size from state to ensure the fixed 400x35 shape is applied
+                                // Do NOT restore size from state to ensure the fixed shape is applied
                                 let _ = window.set_size(tauri::Size::Logical(
-                                    tauri::LogicalSize::new(400.0, 35.0)
+                                    tauri::LogicalSize::new(400.0, PANEL_COLLAPSED_HEIGHT)
                                 ));
                                 restored = true;
                             }
@@ -527,7 +555,7 @@ pub fn run() {
                         let work_area = monitor.work_area();
                         let sf = monitor.scale_factor();
                         
-                        let win_h = (35.0 * sf) as f64;
+                        let win_h = (PANEL_COLLAPSED_HEIGHT * sf) as f64;
                         let taskbar_h = (full_size.height as i32 - work_area.size.height as i32).abs() as f64;
                         
                         let padding = (12.0 * sf) as f64;

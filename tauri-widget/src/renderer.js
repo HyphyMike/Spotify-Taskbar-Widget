@@ -862,6 +862,10 @@ document.addEventListener('DOMContentLoaded', () => {
     let splitDragStartScale = 1;
 
     splitHandle.addEventListener('pointerdown', (e) => {
+        // Stop this from bubbling to the widget's data-tauri-drag-region container,
+        // which would otherwise start moving the whole window instead of resizing.
+        e.preventDefault();
+        e.stopPropagation();
         splitDragStartX = e.clientX;
         splitDragStartScale = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--ctrl-scale')) || 1;
         splitHandle.classList.add('dragging');
