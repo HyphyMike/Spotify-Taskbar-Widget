@@ -24,3 +24,6 @@ window_state.json
 *.zip
 dist/
 build/
+
+# Per-installation Spotify client ID; never committed.
+config.json

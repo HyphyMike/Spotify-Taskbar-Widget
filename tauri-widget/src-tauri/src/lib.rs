@@ -69,10 +69,68 @@ fn clear_tokens_from_keyring() {
     }
 }
 
+/// Reads the Spotify application's client ID, which is per-installation and so
+/// is deliberately not compiled in. A PKCE client ID is not a cryptographic
+/// secret — it travels in the authorization URL in plain sight — but it does
+/// identify one particular Spotify app registration, and publishing it invites
+/// strangers to spend someone else's API quota.
+///
+/// Checked in order: the `SPOTIFY_CLIENT_ID` environment variable, then
+/// `config.json` beside the executable, then `config.json` in the per-user
+/// config directory. Returns an empty string when nothing is configured;
+/// `authorize` turns that into a message the user can act on.
+fn load_client_id() -> String {
+    if let Ok(id) = std::env::var("SPOTIFY_CLIENT_ID") {
+        let id = id.trim().to_string();
+        if !id.is_empty() {
+            return id;
+        }
+    }
+
+    for path in client_id_config_paths() {
+        if let Ok(body) = fs::read_to_string(&path) {
+            if let Some(id) = parse_client_id(&body) {
+                return id;
+            }
+        }
+    }
+
+    String::new()
+}
+
+/// Candidate `config.json` locations, nearest first.
+fn client_id_config_paths() -> Vec<PathBuf> {
+    let mut paths = Vec::new();
+
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            paths.push(dir.join("config.json"));
+        }
+    }
+
+    // Windows uses APPDATA; other platforms follow XDG, falling back to ~/.config.
+    let base = std::env::var("APPDATA")
+        .map(PathBuf::from)
+        .or_else(|_| std::env::var("XDG_CONFIG_HOME").map(PathBuf::from))
+        .or_else(|_| std::env::var("HOME").map(|h| PathBuf::from(h).join(".config")));
+    if let Ok(base) = base {
+        paths.push(base.join(KEYRING_SERVICE).join("config.json"));
+    }
+
+    paths
+}
+
+/// Pulls `client_id` out of a config document. Split out from the filesystem
+/// walk above so it can be tested without touching disk.
+fn parse_client_id(body: &str) -> Option<String> {
+    let value: serde_json::Value = serde_json::from_str(body).ok()?;
+    let id = value.get("client_id")?.as_str()?.trim();
+    if id.is_empty() { None } else { Some(id.to_string()) }
+}
+
 fn load_config() -> Config {
-    // For simplicity, hardcoding for now, or you can read from config.json
     Config {
-        client_id: "CLIENT_ID_SUPPLIED_AT_RUNTIME".to_string(),
+        client_id: load_client_id(),
         redirect_uri: "http://127.0.0.1:4381/callback".to_string(),
         port: 4381,
         scopes: "user-read-currently-playing user-read-playback-state user-modify-playback-state user-library-modify user-library-read streaming".to_string(),
@@ -126,6 +184,21 @@ async fn get_access_token(state: State<'_, AppState>) -> Result<Option<String>, 
 
 #[tauri::command]
 async fn authorize(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    // Fail with something actionable rather than sending Spotify a blank
+    // client_id and surfacing its generic "INVALID_CLIENT" page.
+    if state.config.client_id.is_empty() {
+        return Err(format!(
+            "No Spotify client ID configured. Set the SPOTIFY_CLIENT_ID environment \
+             variable, or create config.json containing {{\"client_id\": \"...\"}} in \
+             one of: {}",
+            client_id_config_paths()
+                .iter()
+                .map(|p| p.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        ));
+    }
+
     let code_verifier = generate_random_string(64);
     let oauth_state = generate_random_string(32);
     let mut hasher = Sha256::new();
@@ -849,10 +922,48 @@ mod tests {
     }
 
     // --- Config defaults ---
+    // The client ID is per-installation and no longer compiled in, so these
+    // cover the parsing and lookup instead of asserting a literal value.
+
     #[test]
-    fn test_config_has_correct_client_id() {
+    fn test_parse_client_id_reads_the_field() {
+        let id = parse_client_id(r#"{"client_id": "abc123"}"#);
+        assert_eq!(id, Some("abc123".to_string()));
+    }
+
+    #[test]
+    fn test_parse_client_id_trims_surrounding_whitespace() {
+        // Hand-edited config files routinely pick up a stray space or newline.
+        let id = parse_client_id("{\"client_id\": \"  abc123\\n\"}");
+        assert_eq!(id, Some("abc123".to_string()));
+    }
+
+    #[test]
+    fn test_parse_client_id_rejects_empty_and_missing() {
+        assert_eq!(parse_client_id(r#"{"client_id": ""}"#), None);
+        assert_eq!(parse_client_id(r#"{"client_id": "   "}"#), None);
+        assert_eq!(parse_client_id(r#"{"other": "value"}"#), None);
+        assert_eq!(parse_client_id("not json at all"), None);
+        assert_eq!(parse_client_id(""), None);
+    }
+
+    #[test]
+    fn test_client_id_config_paths_include_one_beside_the_executable() {
+        let paths = client_id_config_paths();
+        assert!(!paths.is_empty(), "no config locations were offered");
+        assert!(
+            paths.iter().all(|p| p.file_name().unwrap() == "config.json"),
+            "every candidate should be a config.json"
+        );
+    }
+
+    #[test]
+    fn test_config_client_id_is_not_compiled_in() {
+        // Guards the reason this indirection exists: a build with no config
+        // present must come back empty rather than carrying someone's ID.
+        let from_disk = load_client_id();
         let cfg = load_config();
-        assert_eq!(cfg.client_id, "CLIENT_ID_SUPPLIED_AT_RUNTIME");
+        assert_eq!(cfg.client_id, from_disk);
     }
 
     #[test]

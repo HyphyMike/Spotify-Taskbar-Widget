@@ -3,7 +3,12 @@
 This build is compiled locally from the public source at tag `v0.3.5`, with
 additional hardening:
 
-- Spotify OAuth uses the user-supplied client ID; no client secret is embedded.
+- Spotify OAuth uses a per-installation client ID read at runtime from
+  `SPOTIFY_CLIENT_ID` or `config.json`; nothing is compiled in and no client
+  secret exists to embed. A PKCE client ID is not a cryptographic secret — it
+  travels in the authorization URL in plain sight — but it identifies one
+  Spotify app registration, so it stays out of the repository rather than
+  inviting strangers to spend someone else's API quota.
 - Spotify OAuth uses PKCE and validates a per-login `state` value.
 - Tokens are stored in the operating system credential vault, not plaintext.
 - The webview may load scripts only from the app itself and Spotify's official

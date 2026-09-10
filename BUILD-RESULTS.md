@@ -3,8 +3,8 @@
 Built on 2026-09-09 from the local `local-hardening` branch, which carries the
 hardening documented in `SECURITY-LOCAL.md` on top of upstream commit
 `7520b2a8d4662ff94675d341d69943b50b078614` (`v0.3.5`). This local build is
-version `0.3.8` and Spotify OAuth is configured with the user-supplied Client ID
-`CLIENT_ID_SUPPLIED_AT_RUNTIME`.
+version `0.3.8`. The Spotify client ID is supplied per installation at runtime and
+is not part of the build — see **Configuring the client ID** below.
 
 New in `0.3.8`:
 
@@ -70,6 +70,20 @@ Not verified: the watcher's close-the-widget-when-Spotify-quits path, which woul
 have meant killing Spotify mid-playback; and whether the tray icon lands in the
 visible tray or the hidden overflow, since the tray toolbar window classes do not
 resolve on this Windows build.
+
+## Configuring the client ID
+
+The widget needs the client ID of a Spotify application you create at
+<https://developer.spotify.com/dashboard>, with
+`http://127.0.0.1:4381/callback` added as a redirect URI. Supply it either way:
+
+- set the `SPOTIFY_CLIENT_ID` environment variable, or
+- copy `config.example.json` to `config.json` — beside the executable, or in
+  `%APPDATA%\com.madal.spotify-taskbar-widget\` — and put the ID in it.
+
+`config.json` is git-ignored. Without one, **Connect Spotify** reports which
+locations were searched instead of failing against Spotify's generic
+`INVALID_CLIENT` page.
 
 ## Running it
 

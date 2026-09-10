@@ -12,6 +12,15 @@
 
 ---
 
+> **This is a modified copy**, based on [MadalinaCarcea221989/Spotify-Taskbar-Widget](https://github.com/MadalinaCarcea221989/Spotify-Taskbar-Widget) at `v0.3.5`. The badges above still point at the original project. Changes here:
+>
+> - Security hardening — OAuth `state` validation, tokens in the OS credential vault, tightened CSP and scopes ([SECURITY-LOCAL.md](SECURITY-LOCAL.md))
+> - The bar sits **inside** the Windows 10 taskbar and holds its z-order against it, rather than floating above
+> - Purple theme, square-free rounded corners, 50% translucency
+> - Optional watcher that opens the widget with Spotify ([tools/](tools/))
+>
+> **You must supply your own Spotify client ID** — see [Configuring the client ID](BUILD-RESULTS.md#configuring-the-client-id). None is bundled.
+
 A premium, ultra-slim (40px) Spotify mini-player designed for native desktop integration. Compatible with Windows 11, macOS, and Linux, this widget integrates into your Taskbar or Menu Bar for seamless playback control.
 
 ## Performance Comparison
