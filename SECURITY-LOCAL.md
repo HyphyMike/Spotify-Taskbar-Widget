@@ -32,6 +32,18 @@ additional hardening:
   `isPlaying:true`, official desktop client confirmed not running throughout.
 - The backend only sends API requests to `https://api.spotify.com/v1/`.
 - Unneeded profile and email scopes have been removed.
+- `playlist-read-private` and `playlist-read-collaborative` added in `0.3.11`
+  — not a scope creep, a missing one: the app's own Playlists panel
+  (`shim.js`'s `getPlaylists`/`getPlaylistTracks`) has called `/me/playlists`
+  since it was built, but the scope that endpoint requires for a user's own
+  playlists was never in the request — not in this fork, and not in upstream
+  either. Surfaced as `403 Insufficient client scope` from Spotify's own API,
+  confirmed directly by calling `getPlaylists()` over the same CDP connection
+  used for the standalone-playback fix above.
+  **A scope change only takes effect on a fresh token** — anyone already
+  connected needs to reconnect once (Force Reconnect, or log out and back in)
+  after updating; the cached token from before this fix doesn't gain the new
+  grant on its own.
 - No updater, telemetry, shell execution, or arbitrary file access is included,
   and the application never registers itself to start with Windows. (The
   optional watcher in `tools/` does install a logon entry — see below. It is a

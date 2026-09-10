@@ -3,10 +3,19 @@
 Built on 2026-09-10 from the local `local-hardening` branch, which carries the
 hardening documented in `SECURITY-LOCAL.md` on top of upstream commit
 `7520b2a8d4662ff94675d341d69943b50b078614` (`v0.3.5`). This local build is
-version `0.3.10`. The Spotify client ID is supplied per installation at runtime
+version `0.3.11`. The Spotify client ID is supplied per installation at runtime
 and is not part of the build — see **Configuring the client ID** below.
 
-New in `0.3.10` — the important one:
+New in `0.3.11`:
+
+- Added the `playlist-read-private` and `playlist-read-collaborative` OAuth
+  scopes. `/me/playlists` (the Playlists panel) was 403ing with `Insufficient
+  client scope` — the endpoint it calls has always needed a scope the app
+  never requested, in this fork or upstream. **Reconnect once** (Force
+  Reconnect, or log out and back in) to pick this up; a scope change doesn't
+  retroactively apply to an already-issued token. See `SECURITY-LOCAL.md`.
+
+New in `0.3.10`:
 
 - Fixed a CSP bug (`frame-src 'none'`) that had silently broken the widget's
   own standalone playback — the entire reason this app exists instead of the
@@ -58,9 +67,9 @@ New in `0.3.8`:
 
 | File | SHA-256 |
 | --- | --- |
-| `dist/Spotify Taskbar Widget Portable.exe` | `BB92318299EA7D105B8D775ED516B8CC676AAC86141FAB6F746C8451FC89A69F` |
-| `dist/Spotify Taskbar Widget 0.3.10 Setup.exe` | `351D2EFF1DF0DDDCE5ADD202B25AA209C4A0946D7269C5703823F2D34C8EDA8C` |
-| `dist/Spotify Taskbar Widget 0.3.10.msi` | `AA609951CE6F7EFF4814BABF36CE56CAB98D844596DF1816043E970402A56745` |
+| `dist/Spotify Taskbar Widget Portable.exe` | `70298E829C703CB000E54E7892F91112B360DAB2CADD7A44B419E380FA11805B` |
+| `dist/Spotify Taskbar Widget 0.3.11 Setup.exe` | `9722888E8F2253C4569C6B363FBFCF37B3C8F33F5C2CD643630161DF562C7ED1` |
+| `dist/Spotify Taskbar Widget 0.3.11.msi` | `328139F56F64BDADA867ACF49E4BF5B8EADB2B0F6D9315539273DFCCD3848C63` |
 
 The `0.3.5` and `0.3.7` artifacts from earlier builds are still in `dist/`
 alongside these; the portable executable is overwritten in place each build.

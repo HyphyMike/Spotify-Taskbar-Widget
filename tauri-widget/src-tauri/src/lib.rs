@@ -133,7 +133,7 @@ fn load_config() -> Config {
         client_id: load_client_id(),
         redirect_uri: "http://127.0.0.1:4381/callback".to_string(),
         port: 4381,
-        scopes: "user-read-currently-playing user-read-playback-state user-modify-playback-state user-library-modify user-library-read streaming".to_string(),
+        scopes: "user-read-currently-playing user-read-playback-state user-modify-playback-state user-library-modify user-library-read streaming playlist-read-private playlist-read-collaborative".to_string(),
     }
 }
 
@@ -997,6 +997,10 @@ mod tests {
         assert!(cfg.scopes.contains("user-modify-playback-state"));
         assert!(cfg.scopes.contains("streaming"));
         assert!(cfg.scopes.contains("user-library-modify"));
+        // Without these, /me/playlists 403s with "Insufficient client scope" --
+        // present in neither this fork nor upstream until that was hit directly.
+        assert!(cfg.scopes.contains("playlist-read-private"));
+        assert!(cfg.scopes.contains("playlist-read-collaborative"));
         assert!(!cfg.scopes.contains("user-read-email"));
         assert!(!cfg.scopes.contains("user-read-private"));
     }
