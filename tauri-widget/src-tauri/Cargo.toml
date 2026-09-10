@@ -29,5 +29,6 @@ rand = "0.8"
 sha2 = "0.10"
 base64 = "0.21"
 urlencoding = "2.1"
+url = "2"
 keyring = { version = "4", features = ["apple-native-keyring-store"] }
 tauri-plugin-global-shortcut = "2"

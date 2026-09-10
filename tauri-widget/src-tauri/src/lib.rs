@@ -9,6 +9,7 @@ use rand::RngCore;
 use sha2::{Sha256, Digest};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use keyring::Entry;
+use url::Url;
 use tauri_plugin_global_shortcut::{Code, Shortcut, ShortcutState};
 
 const KEYRING_SERVICE: &str = "com.madal.spotify-taskbar-widget";
@@ -68,10 +69,10 @@ fn clear_tokens_from_keyring() {
 fn load_config() -> Config {
     // For simplicity, hardcoding for now, or you can read from config.json
     Config {
-        client_id: "0f68737f57b7444fb3a39ca14261bbcb".to_string(),
+        client_id: "CLIENT_ID_SUPPLIED_AT_RUNTIME".to_string(),
         redirect_uri: "http://127.0.0.1:4381/callback".to_string(),
         port: 4381,
-        scopes: "user-read-currently-playing user-read-playback-state user-modify-playback-state user-library-modify user-library-read streaming user-read-email user-read-private".to_string(),
+        scopes: "user-read-currently-playing user-read-playback-state user-modify-playback-state user-library-modify user-library-read streaming".to_string(),
     }
 }
 
@@ -123,33 +124,49 @@ async fn get_access_token(state: State<'_, AppState>) -> Result<Option<String>, 
 #[tauri::command]
 async fn authorize(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     let code_verifier = generate_random_string(64);
+    let oauth_state = generate_random_string(32);
     let mut hasher = Sha256::new();
     hasher.update(code_verifier.as_bytes());
     let code_challenge = URL_SAFE_NO_PAD.encode(hasher.finalize());
 
     let auth_url = format!(
-        "https://accounts.spotify.com/authorize?response_type=code&client_id={}&scope={}&redirect_uri={}&code_challenge_method=S256&code_challenge={}",
+        "https://accounts.spotify.com/authorize?response_type=code&client_id={}&scope={}&redirect_uri={}&code_challenge_method=S256&code_challenge={}&state={}",
         state.config.client_id,
         urlencoding::encode(&state.config.scopes),
         urlencoding::encode(&state.config.redirect_uri),
-        code_challenge
+        code_challenge,
+        oauth_state
     );
 
-    tauri_plugin_opener::open_url(auth_url.clone(), None::<&str>).map_err(|e| e.to_string())?;
-
+    // Bind before opening the browser so another local process cannot race us
+    // for the callback port. PKCE protects the code; state also ties the
+    // callback to this exact authorization attempt.
     let server = Server::http(format!("127.0.0.1:{}", state.config.port)).map_err(|e| e.to_string())?;
+    tauri_plugin_opener::open_url(auth_url, None::<&str>).map_err(|e| e.to_string())?;
     
     // In a real app we shouldn't block the tauri command thread like this for long, 
     // but for local auth it's fast.
     if let Ok(request) = server.recv() {
-        let url = request.url().to_string();
-        if url.starts_with("/callback?code=") {
-            let code = url.split("code=").nth(1).unwrap().split('&').next().unwrap();
+        let callback_url = Url::parse(&format!("http://127.0.0.1{}", request.url()))
+            .map_err(|e| e.to_string())?;
+        if callback_url.path() == "/callback" {
+            let query: std::collections::HashMap<String, String> =
+                callback_url.query_pairs().into_owned().collect();
+
+            if query.get("state") != Some(&oauth_state) {
+                let _ = request.respond(Response::from_string("Invalid OAuth state.").with_status_code(400));
+                return Ok(());
+            }
+
+            let Some(code) = query.get("code") else {
+                let _ = request.respond(Response::from_string("Missing authorization code.").with_status_code(400));
+                return Ok(());
+            };
             
             let params = [
                 ("client_id", state.config.client_id.as_str()),
                 ("grant_type", "authorization_code"),
-                ("code", code),
+                ("code", code.as_str()),
                 ("redirect_uri", state.config.redirect_uri.as_str()),
                 ("code_verifier", &code_verifier),
             ];
@@ -206,6 +223,14 @@ async fn spotify_fetch(
     method: String,
     body: Option<String>,
 ) -> Result<SpotifyResponse, String> {
+    if !endpoint.starts_with('/')
+        || endpoint.starts_with("//")
+        || endpoint.contains('\r')
+        || endpoint.contains('\n')
+    {
+        return Err("Invalid Spotify API endpoint".to_string());
+    }
+
     let token = {
         let mut guard = state.tokens.lock().await;
         if let Some(tokens) = guard.as_mut() {
@@ -506,16 +531,6 @@ pub fn run() {
 
             // Restore or snap window on startup
             if let Some(window) = app.get_webview_window("main") {
-                let main_window = window.clone();
-                
-                // --- Close to Tray Logic ---
-                window.on_window_event(move |event| {
-                    if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                        api.prevent_close();
-                        let _ = main_window.hide();
-                    }
-                });
-
                 let state_path = get_window_state_path(app.handle());
                 let mut restored = false;
 
@@ -767,7 +782,7 @@ mod tests {
     #[test]
     fn test_config_has_correct_client_id() {
         let cfg = load_config();
-        assert_eq!(cfg.client_id, "0f68737f57b7444fb3a39ca14261bbcb");
+        assert_eq!(cfg.client_id, "CLIENT_ID_SUPPLIED_AT_RUNTIME");
     }
 
     #[test]
@@ -784,5 +799,7 @@ mod tests {
         assert!(cfg.scopes.contains("user-modify-playback-state"));
         assert!(cfg.scopes.contains("streaming"));
         assert!(cfg.scopes.contains("user-library-modify"));
+        assert!(!cfg.scopes.contains("user-read-email"));
+        assert!(!cfg.scopes.contains("user-read-private"));
     }
 }

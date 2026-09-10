@@ -1,6 +1,6 @@
 # Dependencies
 node_modules/
-package-lock.json
+.tooling/
 
 # Rust / Tauri
 tauri-widget/src-tauri/target/

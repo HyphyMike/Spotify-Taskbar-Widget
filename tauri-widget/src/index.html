@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="UTF-8">
-    <meta http-equiv="Content-Security-Policy" content="default-src * 'unsafe-inline' 'unsafe-eval' data: blob:;">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://sdk.scdn.co; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; media-src 'self' data: blob:; connect-src https://*.spotify.com wss://*.spotify.com; object-src 'none'; base-uri 'none'; frame-src 'none';">
     <title>Spotify Mini Player</title>
     <link rel="stylesheet" href="styles.css">
 </head>
