@@ -20,8 +20,16 @@ additional hardening:
   and the application never registers itself to start with Windows. (The
   optional watcher in `tools/` does install a logon entry — see below. It is a
   separate script, installed by hand, and the widget knows nothing about it.)
-- Closing the player window terminates the app instead of leaving a hidden
-  background process.
+- The visible X drawn inside the bar is a real quit — clicking it exits the
+  process, same as upstream. A native close request instead (Alt+F4, or an
+  external `WM_CLOSE`; there's no titlebar for the OS to draw one on) hides to
+  the tray without exiting, as of `0.3.9` — restoring what upstream does, which
+  an earlier hardening pass had turned into an unconditional exit. Reversed at
+  the user's request: keeping a companion widget resident and instantly
+  reachable from the tray isn't a meaningful security boundary for a purely
+  local app with no elevated privileges, autostart, or telemetry, and the prior
+  behavior contradicted this very README, which has always advertised
+  "Background Operation: Runs in the system tray."
 
 The official Spotify Playback SDK remains remote code supplied by Spotify. It is
 required for this widget to act as its own Spotify Connect playback device.
@@ -56,4 +64,23 @@ Spotify is running, closing it again when Spotify quits.
   deliberately: that route needs elevation and leaves a permanent WMI event
   consumer behind, which is a far larger and more persistent footprint.
 - The script reads process names only. It starts one fixed executable path and
-  closes windows by handle; it takes no input from anything it observes.
+  ends the widget by PID; it takes no input from anything it observes.
+- As of `0.3.9`, ends the widget with `Stop-Process` rather than
+  `CloseMainWindow`. The widget's own close request now means "hide", not
+  "quit" (see above) — the two are indistinguishable to an outside process,
+  since both arrive as the same `WM_CLOSE`, so `CloseMainWindow` would just hide
+  it here instead of freeing the memory. Window position is already persisted
+  continuously on every move/resize, not only at close time, so nothing is lost
+  by ending the process directly.
+- Guarded against running twice with a named mutex (`WaitOne(0)`), since the
+  Startup shortcut fires on every logon and a second instance's local
+  `$widgetWasUp`/`$suppressed` state has no way to stay in sync with the
+  first's — found by running one during this session's own testing and having
+  two overlapping instances race each other's `Start-Process`/`Stop-Process`
+  calls. The mutex needed one more fix on top: .NET marks a mutex "abandoned"
+  when its holder dies without releasing it (exactly what `Stop-Process -Force`
+  on a running watcher does), and `WaitOne` throws
+  `AbandonedMutexException` in that case rather than just returning `true` —
+  left unhandled, that exception kills the script before it ever reaches the
+  polling loop, silently, on every future launch. Caught explicitly and treated
+  as ordinary acquisition, which is what .NET's own documentation says it is.

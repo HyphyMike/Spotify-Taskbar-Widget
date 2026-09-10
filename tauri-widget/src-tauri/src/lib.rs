@@ -748,20 +748,37 @@ pub fn run() {
                     });
                 }
 
-                // Listen to move/resize events and save state immediately in Rust
+                // Listen to move/resize events and save state immediately in Rust;
+                // hide to tray instead of exiting on a native close request.
                 let save_path = state_path.clone();
                 let window_clone = window.clone();
                 window.on_window_event(move |event| {
-                    let path = match &save_path { Some(p) => p, None => return };
                     match event {
+                        // The window is undecorated, so there is no titlebar X for
+                        // the OS to show — but Alt+F4, a window-manager close
+                        // gesture, or an external WM_CLOSE (the watcher script used
+                        // to send one) still raise this. Upstream treats that as
+                        // "get out of my way", not "quit", and hides rather than
+                        // exiting; the visible X drawn inside the bar is the actual
+                        // quit control (see exit_app, and the tray's Quit item),
+                        // and is untouched by this — app.exit() does not route
+                        // through CloseRequested.
+                        tauri::WindowEvent::CloseRequested { api, .. } => {
+                            api.prevent_close();
+                            let _ = window_clone.hide();
+                        }
                         tauri::WindowEvent::Moved(pos) => {
-                            if let Ok(size) = window_clone.outer_size() {
-                                persist_window_state(path, pos.x, pos.y, size.width, size.height);
+                            if let Some(path) = &save_path {
+                                if let Ok(size) = window_clone.outer_size() {
+                                    persist_window_state(path, pos.x, pos.y, size.width, size.height);
+                                }
                             }
                         }
                         tauri::WindowEvent::Resized(size) => {
-                            if let Ok(pos) = window_clone.outer_position() {
-                                persist_window_state(path, pos.x, pos.y, size.width, size.height);
+                            if let Some(path) = &save_path {
+                                if let Ok(pos) = window_clone.outer_position() {
+                                    persist_window_state(path, pos.x, pos.y, size.width, size.height);
+                                }
                             }
                         }
                         _ => {}

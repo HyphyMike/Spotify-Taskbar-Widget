@@ -6,6 +6,28 @@
 
 $WidgetExe = Join-Path $env:LOCALAPPDATA 'Spotify Taskbar Widget\spotify-taskbar-widget.exe'
 
+# Refuse to run twice. The Startup shortcut fires on every logon, and each
+# instance's $widgetWasUp/$suppressed state below is local to that process, so
+# two overlapping instances can independently reach different conclusions
+# about the same widget and end up racing each other's Start-Process /
+# Stop-Process calls. A named mutex costs nothing per poll and makes a second
+# launch (another logon while one is already running, or a manual re-run) a
+# clean no-op instead of a silent duplicate.
+$mutex = New-Object System.Threading.Mutex($false, 'Local\SpotifyTaskbarWidgetWatcher')
+try {
+    if (-not $mutex.WaitOne(0)) {
+        exit
+    }
+}
+catch [System.Threading.AbandonedMutexException] {
+    # A previous holder died (crashed, or was force-killed) without releasing
+    # the mutex. .NET still hands this thread ownership when that happens --
+    # WaitOne's return value is moot, since it throws instead of returning --
+    # so this is the normal "I got it" path, not a failure: fall through to
+    # the polling loop rather than treating the exception as "someone else
+    # has it" and exiting.
+}
+
 # Close the widget when Spotify quits. Set to $false to leave the bar up.
 $CloseWithSpotify = $true
 
@@ -45,9 +67,13 @@ while ($true) {
         $widgetWasUp = $false
 
         if ($widgetUp -and $CloseWithSpotify) {
-            # CloseMainWindow, not Kill: the widget saves its window position on
-            # a normal close.
-            foreach ($p in $widget) { [void]$p.CloseMainWindow() }
+            # Stop-Process, not CloseMainWindow: the widget now hides to the tray
+            # instead of exiting on a normal close request (Alt+F4, or exactly the
+            # WM_CLOSE that CloseMainWindow used to send), so CloseMainWindow would
+            # just hide it here rather than free the memory. Window position is
+            # already persisted continuously on every move/resize, not only at
+            # close time, so nothing is lost by ending the process directly.
+            foreach ($p in $widget) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
         }
     }
 
