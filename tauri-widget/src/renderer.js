@@ -422,10 +422,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     reconnectBtn.addEventListener('click', async () => {
-        if (confirm('Force reconnect to Spotify?')) {
-            await window.player.logout();
-            window.location.reload();
-        }
+        // No confirm() here on purpose: a native confirm dialog has nowhere to
+        // render its message or buttons inside a ~40px-tall undecorated window
+        // (found directly -- it showed only a blank title bar, "tauri.localhost
+        // says", with no visible way to respond). Force Reconnect is a one-click
+        // OAuth re-login away from undone if this is ever hit by accident, so
+        // the confirmation step was costing more than it protected.
+        await window.player.logout();
+        window.location.reload();
     });
 
     closeBtn.addEventListener('click', () => {

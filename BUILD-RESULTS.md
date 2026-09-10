@@ -3,8 +3,19 @@
 Built on 2026-09-10 from the local `local-hardening` branch, which carries the
 hardening documented in `SECURITY-LOCAL.md` on top of upstream commit
 `7520b2a8d4662ff94675d341d69943b50b078614` (`v0.3.5`). This local build is
-version `0.3.11`. The Spotify client ID is supplied per installation at runtime
+version `0.3.12`. The Spotify client ID is supplied per installation at runtime
 and is not part of the build — see **Configuring the client ID** below.
+
+New in `0.3.12`:
+
+- Removed the `confirm('Force reconnect to Spotify?')` dialog on the Force
+  Reconnect button. Found directly: a native `confirm()` has nowhere to render
+  its message or OK/Cancel buttons inside a window that's only ~40-48px tall —
+  it showed as a bare, unusable title bar reading "tauri.localhost says" and
+  nothing else, blocking the button from ever completing. Force Reconnect is a
+  one-click OAuth re-login away from undone, so the confirmation step was
+  costing more than it protected; the button now logs out and reloads
+  directly, the same as confirming always did.
 
 New in `0.3.11`:
 
@@ -67,9 +78,9 @@ New in `0.3.8`:
 
 | File | SHA-256 |
 | --- | --- |
-| `dist/Spotify Taskbar Widget Portable.exe` | `70298E829C703CB000E54E7892F91112B360DAB2CADD7A44B419E380FA11805B` |
-| `dist/Spotify Taskbar Widget 0.3.11 Setup.exe` | `9722888E8F2253C4569C6B363FBFCF37B3C8F33F5C2CD643630161DF562C7ED1` |
-| `dist/Spotify Taskbar Widget 0.3.11.msi` | `328139F56F64BDADA867ACF49E4BF5B8EADB2B0F6D9315539273DFCCD3848C63` |
+| `dist/Spotify Taskbar Widget Portable.exe` | `5B575C73D9A4FA2D6BFA8E9AACF5217FF8E8E227A5A526B0084C5FE99DE8E79C` |
+| `dist/Spotify Taskbar Widget 0.3.12 Setup.exe` | `761D233BB962449B6DE0D4C520C5857404ABD4CEDC47714881F8A6844FD03FC7` |
+| `dist/Spotify Taskbar Widget 0.3.12.msi` | `DB2260219C6A6122BA12D344E6523E1A29EDCDB03053F8B1F5A9117B17B853CD` |
 
 The `0.3.5` and `0.3.7` artifacts from earlier builds are still in `dist/`
 alongside these; the portable executable is overwritten in place each build.
