@@ -5,14 +5,14 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/github/v/release/MadalinaCarcea221989/Spotify-Taskbar-Widget?style=for-the-badge&color=1DB954" alt="Release">
-  <img src="https://img.shields.io/github/actions/workflow/status/MadalinaCarcea221989/Spotify-Taskbar-Widget/release.yml?style=for-the-badge" alt="Build Status">
-  <img src="https://img.shields.io/github/license/MadalinaCarcea221989/Spotify-Taskbar-Widget?style=for-the-badge" alt="License">
+  <img src="https://img.shields.io/github/v/release/HyphyMike/Spotify-Taskbar-Widget?style=for-the-badge&color=1DB954" alt="Release">
+  <img src="https://img.shields.io/github/actions/workflow/status/HyphyMike/Spotify-Taskbar-Widget/release.yml?style=for-the-badge" alt="Build Status">
+  <img src="https://img.shields.io/github/license/HyphyMike/Spotify-Taskbar-Widget?style=for-the-badge" alt="License">
 </p>
 
 ---
 
-> **This is a modified copy**, based on [MadalinaCarcea221989/Spotify-Taskbar-Widget](https://github.com/MadalinaCarcea221989/Spotify-Taskbar-Widget) at `v0.3.5`. The badges above still point at the original project. Changes here:
+> **This is a modified copy**, based on [MadalinaCarcea221989/Spotify-Taskbar-Widget](https://github.com/MadalinaCarcea221989/Spotify-Taskbar-Widget) at `v0.3.5`. Changes here:
 >
 > - Security hardening — OAuth `state` validation, tokens in the OS credential vault, tightened CSP and scopes ([SECURITY-LOCAL.md](SECURITY-LOCAL.md))
 > - The bar sits **inside** the Windows 10 taskbar and holds its z-order against it, rather than floating above
@@ -83,12 +83,12 @@ The widget serves as a high-performance remote bridge for your Spotify account. 
 Utilizing the official Spotify Web API, it synchronizes playback across all your connected devices (mobile, smart speakers, or web player) while consuming significantly fewer resources than the standard desktop client.
 
 ## Installation
-1. Visit the [Releases](https://github.com/MadalinaCarcea221989/Spotify-Taskbar-Widget/releases) page.
-2. Download the installer for your operating system:
-   - Windows: .exe or .msi
-   - macOS: .dmg
-   - Linux: .deb
-3. Launch the application and authenticate with your Spotify account.
+1. Visit the [Releases](https://github.com/HyphyMike/Spotify-Taskbar-Widget/releases) page.
+2. Download `Spotify Taskbar Widget Portable.exe` to run without installing, or one of the Windows installers (`.exe` / `.msi`).
+3. Create [config.json](config.example.json) with your own Spotify client ID — see [Configuring the client ID](BUILD-RESULTS.md#configuring-the-client-id).
+4. Launch the application and authenticate with your Spotify account.
+
+The taskbar-seating behaviour above is Windows-specific. The app still builds for macOS and Linux from this source, but only the Windows build has been tested and released here.
 
 ## Tech Stack
 <p align="left">

@@ -21,14 +21,17 @@ New in `0.3.8`:
   per-track accent sampled from album art, and the hardcoded inline background
   in `renderer.js`. All three used to override the theme.
 - Optional Spotify watcher in `tools/` — see `SECURITY-LOCAL.md`.
+- The Spotify client ID is no longer compiled in; it's read from
+  `SPOTIFY_CLIENT_ID` or `config.json` at runtime, so it's safe to publish this
+  source publicly. See **Configuring the client ID** below.
 
 ## Ready-to-run files
 
 | File | SHA-256 |
 | --- | --- |
-| `dist/Spotify Taskbar Widget Portable.exe` | `0C76C0D013E7D3BB6E260115BA525F886FE861ACA701437225D2334BAFC3DC48` |
-| `dist/Spotify Taskbar Widget 0.3.8 Setup.exe` | `37BB3E06110B850E2BA093AFA1BEFBADF1FE0311B75FA924A0EE80865CADCC7D` |
-| `dist/Spotify Taskbar Widget 0.3.8.msi` | `9927D3D19EB399BCD9EDD439CB7D686CC563A3E161B25EA5391BA20E69E83600` |
+| `dist/Spotify Taskbar Widget Portable.exe` | `11E796D431B41F7ED614F118AF071AC160BD6C43F0B95141F82B4A50B6CB5A9B` |
+| `dist/Spotify Taskbar Widget 0.3.8 Setup.exe` | `2B22CECE9EB15780271567FFA12E25C34CDDAD7255440D85685BC30DE3D35703` |
+| `dist/Spotify Taskbar Widget 0.3.8.msi` | `33CF58549A7B65F296358D25E79ACBDBD3BA31949BBC9BD2E5B5923D450FEA57` |
 
 The `0.3.5` and `0.3.7` artifacts from earlier builds are still in `dist/`
 alongside these; the portable executable is overwritten in place each build.
@@ -40,8 +43,8 @@ it as `spotify-taskbar-widget.exe.0.3.7.bak`.
 
 ## Verification
 
-- Rust unit tests: 18 passed, 0 failed (15 pre-existing, 3 covering the taskbar
-  seat geometry).
+- Rust unit tests: 22 passed, 0 failed (15 original, 3 covering the taskbar seat
+  geometry, 4 covering the runtime client-ID lookup).
 - npm audit: 0 known vulnerabilities.
 - JavaScript syntax checks: passed.
 - Placement: the bar sits at y=1040 on a 1920x1080 primary display whose taskbar
