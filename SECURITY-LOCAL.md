@@ -18,3 +18,19 @@ additional hardening:
 
 The official Spotify Playback SDK remains remote code supplied by Spotify. It is
 required for this widget to act as its own Spotify Connect playback device.
+
+## Shell interaction this build adds
+
+Since `0.3.8` the widget sits inside the taskbar strip and re-claims the top of
+the topmost window band once per second, because the taskbar is topmost too and
+buries the bar whenever it is activated.
+
+- It reads the taskbar's screen rectangle (`FindWindowW` on `Shell_TrayWnd`) to
+  work out where to sit, and raises its own window with `SWP_NOACTIVATE` so it
+  never steals focus.
+- No screen space is reserved and no global shell state is created, so nothing
+  has to be cleaned up if the process dies: killing it leaves the desktop exactly
+  as it was.
+- An AppBar registration (`SHAppBarMessage`) was tried first and removed. It
+  works, but the shell refuses to let a docked bar overlap the taskbar, so it
+  could only ever sit above the taskbar rather than in it.

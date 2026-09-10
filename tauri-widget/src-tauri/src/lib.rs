@@ -12,6 +12,9 @@ use keyring::Entry;
 use url::Url;
 use tauri_plugin_global_shortcut::{Code, Shortcut, ShortcutState};
 
+#[cfg(target_os = "windows")]
+mod taskbar;
+
 const KEYRING_SERVICE: &str = "com.madal.spotify-taskbar-widget";
 const KEYRING_USER: &str = "spotify-tokens";
 
@@ -396,6 +399,52 @@ fn focus_window(window: tauri::Window) {
 const PANEL_COLLAPSED_HEIGHT: f64 = 40.0;
 const PANEL_EXPANDED_HEIGHT: f64 = 180.0;
 
+/// True while a panel is open. The AppBar watchdog re-pins the bar to its
+/// reserved strip every few seconds; without this flag it would also drag an
+/// expanded panel — which deliberately grows upward out of the strip — back down
+/// while the user is still reading it.
+#[cfg(target_os = "windows")]
+static PANEL_EXPANDED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Seats the bar inside the taskbar strip and keeps it drawn on top of it.
+/// Safe to call repeatedly — raising a window that is already on top is a no-op
+/// inside the window manager, and the bar is only moved when it has drifted.
+#[cfg(target_os = "windows")]
+fn pin_into_taskbar(window: &tauri::WebviewWindow) {
+    let Ok(hwnd) = window.hwnd() else { return };
+    let raw = hwnd.0 as isize;
+
+    // Re-claim the z-order whether or not a panel is open: a panel that opens
+    // behind the taskbar is as useless as a bar hiding behind it.
+    taskbar::raise_above_taskbar(raw);
+
+    // An expanded panel deliberately grows upward out of the strip, so leave its
+    // geometry alone until it collapses again.
+    if PANEL_EXPANDED.load(std::sync::atomic::Ordering::SeqCst) {
+        return;
+    }
+
+    let (Some(strip), Ok(pos), Ok(size)) =
+        (taskbar::taskbar_rect(), window.outer_position(), window.outer_size()) else { return };
+
+    // A left- or right-docked taskbar is narrower than the bar, and there is no
+    // sensible seat for it inside one — leave the position alone.
+    if strip.right - strip.left < size.width as i32 {
+        return;
+    }
+
+    let bar_height = (PANEL_COLLAPSED_HEIGHT * window.scale_factor().unwrap_or(1.0)).round() as i32;
+    let target_y = taskbar::centered_top(strip.top, strip.bottom - strip.top, bar_height)
+        - taskbar::frame_inset_top(raw);
+
+    // The taskbar owns Y; X stays wherever the bar was dragged along it.
+    if pos.y != target_y {
+        let _ = window.set_position(tauri::Position::Physical(
+            tauri::PhysicalPosition::new(pos.x, target_y),
+        ));
+    }
+}
+
 #[tauri::command]
 fn snap_to_corner(window: tauri::Window) {
     if let Ok(Some(monitor)) = window.primary_monitor() {
@@ -423,6 +472,11 @@ fn snap_to_corner(window: tauri::Window) {
 /// geometry, so the bar can't end up a few pixels off from where it started.
 #[tauri::command]
 fn set_panel_expanded(window: tauri::Window, state: State<'_, AppState>, expanded: bool) {
+    // Recorded before the early return below so the AppBar watchdog always knows
+    // the intended state, even if the geometry lookup fails.
+    #[cfg(target_os = "windows")]
+    PANEL_EXPANDED.store(expanded, std::sync::atomic::Ordering::SeqCst);
+
     let (Ok(pos), Ok(size)) = (window.outer_position(), window.outer_size()) else { return };
     let scale_factor = window.scale_factor().unwrap_or(1.0);
     let collapsed_height_phys = (PANEL_COLLAPSED_HEIGHT * scale_factor).round() as i32;
@@ -604,6 +658,22 @@ pub fn run() {
                 let _ = window.show();
                 let _ = window.set_focus();
                 let _ = window.set_always_on_top(true);
+
+                // Always-on-top is not enough on its own: the taskbar is
+                // always-on-top too and wins the z-order whenever it is activated,
+                // which is what left the bar buried behind it. Nothing notifies a
+                // window that it has lost that contest, so the seat inside the
+                // taskbar is re-claimed on a short timer.
+                #[cfg(target_os = "windows")]
+                {
+                    pin_into_taskbar(&window);
+
+                    let pinned = window.clone();
+                    std::thread::spawn(move || loop {
+                        std::thread::sleep(std::time::Duration::from_secs(1));
+                        pin_into_taskbar(&pinned);
+                    });
+                }
 
                 // Listen to move/resize events and save state immediately in Rust
                 let save_path = state_path.clone();
