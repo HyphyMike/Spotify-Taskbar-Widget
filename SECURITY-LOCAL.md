@@ -11,8 +11,10 @@ additional hardening:
 - Network connections from the webview are restricted to Spotify domains.
 - The backend only sends API requests to `https://api.spotify.com/v1/`.
 - Unneeded profile and email scopes have been removed.
-- No updater, startup task, telemetry, shell execution, or arbitrary file access
-  is included.
+- No updater, telemetry, shell execution, or arbitrary file access is included,
+  and the application never registers itself to start with Windows. (The
+  optional watcher in `tools/` does install a logon entry — see below. It is a
+  separate script, installed by hand, and the widget knows nothing about it.)
 - Closing the player window terminates the app instead of leaving a hidden
   background process.
 
@@ -34,3 +36,19 @@ buries the bar whenever it is activated.
 - An AppBar registration (`SHAppBarMessage`) was tried first and removed. It
   works, but the shell refuses to let a docked bar overlap the taskbar, so it
   could only ever sit above the taskbar rather than in it.
+
+## Optional Spotify watcher (`tools/`)
+
+`tools/install-watcher.ps1` adds one shortcut to the per-user Startup folder,
+pointing at `watcher-launch.vbs`, which runs `spotify-widget-watcher.ps1` hidden.
+That script polls the process list every 3 seconds and opens the widget while
+Spotify is running, closing it again when Spotify quits.
+
+- No admin rights, no registry `Run` key, no scheduled task, no elevation. The
+  install is a single `.lnk` that can be deleted by hand, or removed with
+  `install-watcher.ps1 -Remove`.
+- Polling was chosen over a WMI `Win32_ProcessStartTrace` subscription
+  deliberately: that route needs elevation and leaves a permanent WMI event
+  consumer behind, which is a far larger and more persistent footprint.
+- The script reads process names only. It starts one fixed executable path and
+  closes windows by handle; it takes no input from anything it observes.
