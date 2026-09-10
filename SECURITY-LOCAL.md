@@ -14,6 +14,22 @@ additional hardening:
 - The webview may load scripts only from the app itself and Spotify's official
   Playback SDK host.
 - Network connections from the webview are restricted to Spotify domains.
+- Frames are restricted to Spotify's own SDK host (`frame-src
+  https://sdk.scdn.co`) — not `'none'`, which is what this line said until this
+  was found and fixed. The Web Playback SDK — the thing that lets this widget
+  act as its own Spotify Connect device instead of remote-controlling
+  something else — loads its real player inside a sandboxed iframe at
+  `sdk.scdn.co/embedded/index.html`; blocking all frames silently broke that
+  iframe's navigation (confirmed directly via the browser's own frame tree:
+  it was landing on `chrome-error://chromewebdata/`, `unreachableUrl` pointing
+  at the SDK's embed page) and, with it, the widget's core standalone
+  capability — the entire reason this app exists instead of the official
+  Spotify desktop client. Present since the very first hardening pass, before
+  this repository existed locally; not something later work here introduced,
+  but squarely something later work here should have caught sooner. Re-tested
+  end to end after the fix: device registered with Spotify's own API
+  (`"name":"Spotify Taskbar Widget","type":"Computer"`), track played,
+  `isPlaying:true`, official desktop client confirmed not running throughout.
 - The backend only sends API requests to `https://api.spotify.com/v1/`.
 - Unneeded profile and email scopes have been removed.
 - No updater, telemetry, shell execution, or arbitrary file access is included,
@@ -54,8 +70,18 @@ buries the bar whenever it is activated.
 
 `tools/install-watcher.ps1` adds one shortcut to the per-user Startup folder,
 pointing at `watcher-launch.vbs`, which runs `spotify-widget-watcher.ps1` hidden.
-That script polls the process list every 3 seconds and opens the widget while
-Spotify is running, closing it again when Spotify quits.
+That script polls the process list every 3 seconds and opens the widget when
+the official Spotify desktop app starts.
+
+It does **not** close the widget when Spotify quits, and deliberately never
+ties the widget's lifetime to Spotify's at all — an earlier version of this
+script did exactly that, and it was backwards. The widget is a standalone
+Spotify Connect device in its own right (see the CSP note above); tying its
+death to Spotify's presence would silently kill its own playback within one
+poll interval of closing the very app the widget exists to make unnecessary.
+`Stop-Process` bookkeeping tied to "Spotify is gone" was removed outright
+rather than left as an opt-in default-off setting, so the code can't drift
+back to the wrong behavior by someone flipping a flag without reading this.
 
 - No admin rights, no registry `Run` key, no elevation. The default install is
   a single `.lnk` that can be deleted by hand, or removed with
@@ -82,13 +108,6 @@ Spotify is running, closing it again when Spotify quits.
   consumer behind, which is a far larger and more persistent footprint.
 - The script reads process names only. It starts one fixed executable path and
   ends the widget by PID; it takes no input from anything it observes.
-- As of `0.3.9`, ends the widget with `Stop-Process` rather than
-  `CloseMainWindow`. The widget's own close request now means "hide", not
-  "quit" (see above) — the two are indistinguishable to an outside process,
-  since both arrive as the same `WM_CLOSE`, so `CloseMainWindow` would just hide
-  it here instead of freeing the memory. Window position is already persisted
-  continuously on every move/resize, not only at close time, so nothing is lost
-  by ending the process directly.
 - Guarded against running twice with a named mutex (`WaitOne(0)`), since the
   Startup shortcut fires on every logon and a second instance's local
   `$widgetWasUp`/`$suppressed` state has no way to stay in sync with the

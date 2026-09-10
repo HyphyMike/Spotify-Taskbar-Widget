@@ -1,4 +1,13 @@
-# Opens the taskbar widget when Spotify starts, and closes it when Spotify quits.
+# Opens the taskbar widget when the official Spotify desktop app starts.
+#
+# Does NOT close the widget when Spotify quits, or ever tie the widget's
+# lifetime to Spotify's. That was this script's original design and it was
+# backwards: the widget is a standalone Spotify Connect device in its own
+# right (Web Playback SDK, see renderer.js) built specifically to replace the
+# ~500MB-1GB+ official desktop app, not to accompany it. A "close when Spotify
+# quits" rule fights the app's entire reason to exist -- it would silently
+# kill the widget's own playback within one poll interval of closing the very
+# app the widget is meant to make unnecessary.
 #
 # Runs as a logon task. Polling rather than a WMI process-start subscription:
 # Win32_ProcessStartTrace needs elevation, and a permanent WMI consumer is a far
@@ -27,9 +36,6 @@ catch [System.Threading.AbandonedMutexException] {
     # the polling loop rather than treating the exception as "someone else
     # has it" and exiting.
 }
-
-# Close the widget when Spotify quits. Set to $false to leave the bar up.
-$CloseWithSpotify = $true
 
 $PollSeconds = 3
 
@@ -73,20 +79,13 @@ try {
             }
         }
         else {
-            # Spotify is gone: forget the session so the next launch starts clean.
+            # Spotify is gone. The widget is left alone -- it doesn't need
+            # Spotify's desktop client to keep playing (see the header comment)
+            # -- and only the "was it opened because Spotify launched"
+            # bookkeeping resets, so a future Spotify launch starts fresh rather
+            # than carrying forward suppression state from a previous session.
             $suppressed = $false
             $widgetWasUp = $false
-
-            if ($widgetUp -and $CloseWithSpotify) {
-                # Stop-Process, not CloseMainWindow: the widget now hides to the
-                # tray instead of exiting on a normal close request (Alt+F4, or
-                # exactly the WM_CLOSE that CloseMainWindow used to send), so
-                # CloseMainWindow would just hide it here rather than free the
-                # memory. Window position is already persisted continuously on
-                # every move/resize, not only at close time, so nothing is lost
-                # by ending the process directly.
-                foreach ($p in $widget) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
-            }
         }
 
         Start-Sleep -Seconds $PollSeconds
