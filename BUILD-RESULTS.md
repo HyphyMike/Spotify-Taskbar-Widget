@@ -71,10 +71,10 @@ it as `spotify-taskbar-widget.exe.0.3.7.bak`.
   NSIS installer, or MSI.
 - The files are not Authenticode-signed. Windows SmartScreen may warn because
   this is a personal local build without a paid code-signing certificate.
-
-Not verified: whether the tray icon lands in the visible tray or the hidden
-overflow, since the tray toolbar window classes do not resolve on this Windows
-build.
+- Tray icon: lands in the hidden overflow rather than the visible tray on first
+  run (Windows' default for a new icon) — confirmed directly, since the tray
+  toolbar window classes needed to check this programmatically do not resolve
+  on this Windows build. Drag it out from under the `^` chevron to pin it.
 
 ## Configuring the client ID
 
