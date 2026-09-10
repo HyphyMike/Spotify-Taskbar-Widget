@@ -201,14 +201,17 @@ document.addEventListener('DOMContentLoaded', () => {
             }, 100);
         }
 
+        // Playing/idle only toggles a class; the two background values live in
+        // styles.css. Setting them inline here overrode --bg-color outright,
+        // which is why the bar stayed dark grey whatever the theme said.
         if (isPlaying) {
-            widgetContainer.style.backgroundColor = 'rgba(20, 20, 20, 0.85)';
+            widgetContainer.classList.remove('idle');
             isCurrentlyPlaying = true;
             playIcon.style.display = 'none';
             pauseIcon.style.display = '';
             startSeekTick();
         } else {
-            widgetContainer.style.backgroundColor = 'rgba(15, 15, 15, 0.7)';
+            widgetContainer.classList.add('idle');
             isCurrentlyPlaying = false;
             playIcon.style.display = '';
             pauseIcon.style.display = 'none';

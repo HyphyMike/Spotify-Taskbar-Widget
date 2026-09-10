@@ -3,7 +3,8 @@
        legible as a 7px badge or a 3px progress bar. --accent-deep is the brand
        primary, kept for fills with enough area to carry a colour that dark, and
        --accent-soft lifts secondary text off the background. */
-    --bg-color: rgba(36, 27, 68, 0.94);
+    --bg-color: rgba(36, 27, 68, 0.5);
+    --bg-color-idle: rgba(36, 27, 68, 0.38);
     --accent-color: #8B5CFF;
     --accent-deep: #5021FF;
     --accent-soft: #C5A3FF;
@@ -34,17 +35,26 @@ html, body {
     width: 100%;
     height: 100%;
     background-color: var(--bg-color);
-    backdrop-filter: blur(28px) saturate(200%);
-    /* Square, and no drop shadow. The bar is seated inside the taskbar, where
-       rounded corners let the taskbar show through at each end and a shadow
-       reads as a halo around a floating pill. */
-    border-radius: 0;
-    border: 1px solid var(--border-color);
+    /* No backdrop-filter. The window is OS-transparent, so there is no composited
+       backdrop for it to sample — it resolves against transparent black and
+       renders as a dark slab, which swallowed the translucency below. */
+    /* Rounded, but nothing may paint outside that rounded path. The drop shadow
+       used to pool into dark wedges at each corner and the hairline border
+       traced a visible outline around them — both obvious against the taskbar
+       the bar now sits in. */
+    border-radius: 8px;
+    border: none;
     display: flex;
     flex-direction: column;
     overflow: hidden;
     -webkit-app-region: drag;
     box-shadow: none;
+}
+
+/* Idle sits a little further back than playing. Both values belong here rather
+   than inline in renderer.js, where they used to override the theme. */
+#widget-container.idle {
+    background-color: var(--bg-color-idle);
 }
 
 .view {
