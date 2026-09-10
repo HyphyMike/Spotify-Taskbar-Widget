@@ -1,10 +1,16 @@
 :root {
-    --bg-color: rgba(20, 20, 20, 0.85);
-    --accent-color: #1DB954;
+    /* Bitmori purple. --accent-color is the workhorse: bright enough to stay
+       legible as a 7px badge or a 3px progress bar. --accent-deep is the brand
+       primary, kept for fills with enough area to carry a colour that dark, and
+       --accent-soft lifts secondary text off the background. */
+    --bg-color: rgba(36, 27, 68, 0.94);
+    --accent-color: #8B5CFF;
+    --accent-deep: #5021FF;
+    --accent-soft: #C5A3FF;
     --text-primary: #FFFFFF;
-    --text-secondary: rgba(255, 255, 255, 0.65);
-    --surface-hover: rgba(255, 255, 255, 0.1);
-    --border-color: rgba(255, 255, 255, 0.08);
+    --text-secondary: rgba(226, 214, 255, 0.68);
+    --surface-hover: rgba(139, 92, 255, 0.20);
+    --border-color: rgba(197, 163, 255, 0.14);
 }
 
 * {
@@ -29,13 +35,16 @@ html, body {
     height: 100%;
     background-color: var(--bg-color);
     backdrop-filter: blur(28px) saturate(200%);
-    border-radius: 6px;
+    /* Square, and no drop shadow. The bar is seated inside the taskbar, where
+       rounded corners let the taskbar show through at each end and a shadow
+       reads as a halo around a floating pill. */
+    border-radius: 0;
     border: 1px solid var(--border-color);
     display: flex;
     flex-direction: column;
     overflow: hidden;
     -webkit-app-region: drag;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    box-shadow: none;
 }
 
 .view {
@@ -197,8 +206,8 @@ html, body {
 }
 
 .play-btn {
-    background: var(--text-primary);
-    color: #000;
+    background: var(--accent-color);
+    color: #FFFFFF;
     border: none;
     width: calc(26px * var(--ctrl-scale, 1));
     height: calc(26px * var(--ctrl-scale, 1));
@@ -244,7 +253,7 @@ html, body {
 
 #progress-bar {
     height: 100%;
-    background: var(--accent-color);
+    background: linear-gradient(90deg, var(--accent-deep), var(--accent-color));
     width: 0%;
     transition: width 0.1s linear, background-color 0.5s ease;
 }
@@ -295,6 +304,18 @@ html, body {
     padding: 6px 16px;
     border-radius: 16px;
     font-size: 12px;
+    /* No background was ever declared here, so the button fell back to the
+       browser's default light chrome — a white slab on a dark bar. */
+    background: var(--accent-color);
+    color: var(--text-primary);
+    border: none;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.primary-btn:hover {
+    background: var(--accent-deep);
 }
 
 #like-btn.liked { color: var(--accent-color); }
@@ -348,7 +369,7 @@ html, body {
     overflow-y: auto;
     padding: 5px;
     border-radius: 10px;
-    background: rgba(28, 28, 30, 0.92);
+    background: rgba(24, 20, 44, 0.95);
     backdrop-filter: blur(24px) saturate(180%);
     border: 1px solid rgba(255, 255, 255, 0.1);
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
@@ -362,7 +383,7 @@ html, body {
     margin-left: -5px;
     width: 10px;
     height: 10px;
-    background: rgba(28, 28, 30, 0.92);
+    background: rgba(24, 20, 44, 0.95);
     border-right: 1px solid rgba(255, 255, 255, 0.1);
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
     border-radius: 0 0 2px 0;
@@ -513,8 +534,8 @@ html, body {
 }
 
 .panel-row.active .row-icon {
-    background: rgba(29, 185, 84, 0.15);
-    color: var(--accent-color);
+    background: rgba(139, 92, 255, 0.22);
+    color: var(--accent-soft);
 }
 
 .row-action {

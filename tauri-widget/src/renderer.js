@@ -124,69 +124,18 @@ document.addEventListener('DOMContentLoaded', () => {
             try {
                 const track = JSON.parse(cachedTrack);
                 updatePlayerUI({ track: { ...track, albumArtUrl: cachedArt }, isPlaying: false });
-                updateAccentColor(cachedArt);
             } catch (e) { console.error('Cache load error:', e); }
         }
     }
 
-    // --- Premium Visuals: Dynamic Color Extraction ---
-    async function updateAccentColor(imageUrl) {
+    // --- Album art cache ---
+    // This used to sample the album art down to a single pixel and drive
+    // `--accent-color` from it, which meant the theme became whatever colour the
+    // current cover happened to be. The accent is fixed in styles.css now; only
+    // the art URL is still cached, so the bar can redraw instantly at launch.
+    function cacheAlbumArt(imageUrl) {
         if (!imageUrl) return;
-        
-        const img = new Image();
-        img.crossOrigin = "Anonymous";
-        img.src = imageUrl;
-        img.onload = () => {
-            const canvas = document.createElement('canvas');
-            const ctx = canvas.getContext('2d');
-            canvas.width = 1;
-            canvas.height = 1;
-            ctx.drawImage(img, 0, 0, 1, 1);
-            const [r, g, b] = ctx.getImageData(0, 0, 1, 1).data;
-            
-            // Brighten and saturate for a premium look
-            const hsv = rgbToHsv(r, g, b);
-            const accent = hsvToRgb(hsv.h, Math.max(hsv.s, 0.7), Math.max(hsv.v, 0.8));
-            
-            document.documentElement.style.setProperty('--accent-color', `rgb(${accent.r}, ${accent.g}, ${accent.b})`);
-            localStorage.setItem(ART_CACHE_KEY, imageUrl);
-        };
-    }
-
-    function rgbToHsv(r, g, b) {
-        r /= 255; g /= 255; b /= 255;
-        const max = Math.max(r, g, b), min = Math.min(r, g, b);
-        let h, s, v = max;
-        const d = max - min;
-        s = max === 0 ? 0 : d / max;
-        if (max === min) { h = 0; }
-        else {
-            switch (max) {
-                case r: h = (g - b) / d + (g < b ? 6 : 0); break;
-                case g: h = (b - r) / d + 2; break;
-                case b: h = (r - g) / d + 4; break;
-            }
-            h /= 6;
-        }
-        return { h, s, v };
-    }
-
-    function hsvToRgb(h, s, v) {
-        let r, g, b;
-        const i = Math.floor(h * 6);
-        const f = h * 6 - i;
-        const p = v * (1 - s);
-        const q = v * (1 - f * s);
-        const t = v * (1 - (1 - f) * s);
-        switch (i % 6) {
-            case 0: r = v; g = t; b = p; break;
-            case 1: r = q; g = v; b = p; break;
-            case 2: r = p; g = v; b = t; break;
-            case 3: r = p; g = q; b = v; break;
-            case 4: r = t; g = p; b = v; break;
-            case 5: r = v; g = p; b = q; break;
-        }
-        return { r: Math.round(r * 255), g: Math.round(g * 255), b: Math.round(b * 255) };
+        localStorage.setItem(ART_CACHE_KEY, imageUrl);
     }
 
     // --- Media Key Integration: Media Session API ---
@@ -241,7 +190,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         // Update art and accent color
         if (albumArtEl.src !== track.albumArtUrl) {
-            updateAccentColor(track.albumArtUrl);
+            cacheAlbumArt(track.albumArtUrl);
             updateMediaSessionMetadata(track, isPlaying);
             albumArtEl.style.transform = 'scale(0.9)';
             albumArtEl.style.opacity = '0.5';
