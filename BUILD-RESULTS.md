@@ -62,17 +62,19 @@ it as `spotify-taskbar-widget.exe.0.3.7.bak`.
 - Colour: against a taskbar reading `rgb(220,224,235)`, the bar fill measures
   `rgb(133,121,146)` — the 50% purple blend — and the pixel just inside a rounded
   corner measures `rgb(220,227,235)`, identical to bare taskbar.
-- Watcher: with Spotify running, the widget was closed and the watcher started;
-  the widget was back within 7 seconds.
+- Watcher, open path: with Spotify running, the widget was closed and the
+  watcher started; the widget was back within 7 seconds.
+- Watcher, close path: with both running, Spotify was closed gracefully; the
+  widget closed on its own within the poll window. Spotify was then relaunched;
+  the widget reopened on its own, with no manual step either direction.
 - Microsoft Defender custom scan: no threats found in the portable executable,
   NSIS installer, or MSI.
 - The files are not Authenticode-signed. Windows SmartScreen may warn because
   this is a personal local build without a paid code-signing certificate.
 
-Not verified: the watcher's close-the-widget-when-Spotify-quits path, which would
-have meant killing Spotify mid-playback; and whether the tray icon lands in the
-visible tray or the hidden overflow, since the tray toolbar window classes do not
-resolve on this Windows build.
+Not verified: whether the tray icon lands in the visible tray or the hidden
+overflow, since the tray toolbar window classes do not resolve on this Windows
+build.
 
 ## Configuring the client ID
 
