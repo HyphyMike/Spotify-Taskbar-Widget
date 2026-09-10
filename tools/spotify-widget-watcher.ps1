@@ -40,42 +40,60 @@ $PollSeconds = 3
 $widgetWasUp = $false
 $suppressed = $false
 
-while ($true) {
-    $spotifyUp = $null -ne (Get-Process Spotify -ErrorAction SilentlyContinue)
-    $widget = Get-Process spotify-taskbar-widget -ErrorAction SilentlyContinue
-    $widgetUp = $null -ne $widget
+# wscript.exe launches this hidden specifically so nothing ever flashes on
+# screen, which also means an unhandled exception here fails with zero trace —
+# the process just silently stops existing. Found this out directly, chasing
+# exactly that during this feature's own testing. A crash log costs nothing
+# while things are working, and is the only way to tell "it crashed" from "it
+# was never running" the next time something goes wrong. Overwritten on each
+# failure rather than appended, so it can't grow unbounded — only the most
+# recent crash matters.
+$crashLog = Join-Path $env:APPDATA 'com.madal.spotify-taskbar-widget\watcher-crash.log'
 
-    if ($spotifyUp) {
-        if ($widgetUp) {
-            $widgetWasUp = $true
-        }
-        elseif ($widgetWasUp) {
-            # It was up and now is not: a deliberate close. Stand down.
-            $suppressed = $true
-            $widgetWasUp = $false
-        }
-        elseif (-not $suppressed) {
-            if (Test-Path $WidgetExe) {
-                Start-Process $WidgetExe
+try {
+    while ($true) {
+        $spotifyUp = $null -ne (Get-Process Spotify -ErrorAction SilentlyContinue)
+        $widget = Get-Process spotify-taskbar-widget -ErrorAction SilentlyContinue
+        $widgetUp = $null -ne $widget
+
+        if ($spotifyUp) {
+            if ($widgetUp) {
                 $widgetWasUp = $true
             }
+            elseif ($widgetWasUp) {
+                # It was up and now is not: a deliberate close. Stand down.
+                $suppressed = $true
+                $widgetWasUp = $false
+            }
+            elseif (-not $suppressed) {
+                if (Test-Path $WidgetExe) {
+                    Start-Process $WidgetExe
+                    $widgetWasUp = $true
+                }
+            }
         }
-    }
-    else {
-        # Spotify is gone: forget the session so the next launch starts clean.
-        $suppressed = $false
-        $widgetWasUp = $false
+        else {
+            # Spotify is gone: forget the session so the next launch starts clean.
+            $suppressed = $false
+            $widgetWasUp = $false
 
-        if ($widgetUp -and $CloseWithSpotify) {
-            # Stop-Process, not CloseMainWindow: the widget now hides to the tray
-            # instead of exiting on a normal close request (Alt+F4, or exactly the
-            # WM_CLOSE that CloseMainWindow used to send), so CloseMainWindow would
-            # just hide it here rather than free the memory. Window position is
-            # already persisted continuously on every move/resize, not only at
-            # close time, so nothing is lost by ending the process directly.
-            foreach ($p in $widget) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+            if ($widgetUp -and $CloseWithSpotify) {
+                # Stop-Process, not CloseMainWindow: the widget now hides to the
+                # tray instead of exiting on a normal close request (Alt+F4, or
+                # exactly the WM_CLOSE that CloseMainWindow used to send), so
+                # CloseMainWindow would just hide it here rather than free the
+                # memory. Window position is already persisted continuously on
+                # every move/resize, not only at close time, so nothing is lost
+                # by ending the process directly.
+                foreach ($p in $widget) { Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue }
+            }
         }
-    }
 
-    Start-Sleep -Seconds $PollSeconds
+        Start-Sleep -Seconds $PollSeconds
+    }
+}
+catch {
+    $dir = Split-Path $crashLog
+    if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+    "$(Get-Date -Format o)  $($_ | Out-String)" | Set-Content -Path $crashLog -Encoding utf8
 }

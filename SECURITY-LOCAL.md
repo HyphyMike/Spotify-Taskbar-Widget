@@ -57,9 +57,26 @@ pointing at `watcher-launch.vbs`, which runs `spotify-widget-watcher.ps1` hidden
 That script polls the process list every 3 seconds and opens the widget while
 Spotify is running, closing it again when Spotify quits.
 
-- No admin rights, no registry `Run` key, no scheduled task, no elevation. The
-  install is a single `.lnk` that can be deleted by hand, or removed with
-  `install-watcher.ps1 -Remove`.
+- No admin rights, no registry `Run` key, no elevation. The default install is
+  a single `.lnk` that can be deleted by hand, or removed with
+  `install-watcher.ps1 -Remove`. `install-watcher.ps1 -ScheduledTask` registers
+  a Scheduled Task instead, with restart-on-failure — see below.
+- Something on this machine kills the watcher process periodically, confirmed
+  during this feature's own testing: it happened twice, both times with no
+  trace in its own crash log (see below) or in Defender's detection history,
+  meaning it isn't an unhandled exception or a flagged behavior — something
+  external is ending the process outright. Root cause not identified. A
+  specific lead (a DeepSeek/Charm-based review-watcher script also present on
+  this machine, `Watch-DeepSeek.ps1`) was checked directly and ruled out: it
+  never touches the process list at all, and this watcher runs with
+  `-NoProfile` regardless, so it wouldn't load that tooling's profile setup
+  even if it did.
+- `spotify-widget-watcher.ps1` now logs any unhandled exception to
+  `%APPDATA%\com.madal.spotify-taskbar-widget\watcher-crash.log` (overwritten
+  each time, so it can't grow unbounded) before exiting. Added specifically
+  because `wscript.exe`'s whole purpose is running hidden with zero console
+  output, which also means a crash leaves zero trace by default —
+  `install-watcher.ps1 -Status` surfaces whether this file exists.
 - Polling was chosen over a WMI `Win32_ProcessStartTrace` subscription
   deliberately: that route needs elevation and leaves a permanent WMI event
   consumer behind, which is a far larger and more persistent footprint.
@@ -84,3 +101,16 @@ Spotify is running, closing it again when Spotify quits.
   left unhandled, that exception kills the script before it ever reaches the
   polling loop, silently, on every future launch. Caught explicitly and treated
   as ordinary acquisition, which is what .NET's own documentation says it is.
+
+### The Scheduled Task alternative
+
+`install-watcher.ps1 -ScheduledTask` registers the watcher as a Scheduled Task
+(`MultipleInstances IgnoreNew`, `RestartCount 999` a minute apart) instead of a
+Startup shortcut, so whatever is killing the process gets overridden
+automatically rather than leaving the widget stuck without its companion until
+the next logon. This could not be set up from this development session — even
+the most minimal possible task registration failed with "Access is denied"
+from this sandboxed shell, a hard permission wall rather than a parameter
+issue. Run `install-watcher.ps1 -ScheduledTask` yourself from an ordinary
+terminal if you want that resilience; it does not need administrator rights,
+only rights this particular session's shell doesn't have.
